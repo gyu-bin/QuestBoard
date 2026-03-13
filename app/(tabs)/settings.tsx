@@ -1,14 +1,17 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Alert, Modal, Pressable } from 'react-native';
+import { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Alert, Modal, Pressable, TextInput, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Coins, Award, RotateCcw, RotateCw, Target, TrendingUp, X } from 'lucide-react-native';
+import { Coins, Award, RotateCcw, RotateCw, Target, TrendingUp, X, Trophy, Calendar, Pencil } from 'lucide-react-native';
 import { useStore } from '@/store/useStore';
+import { CharacterView } from '@/components/CharacterView';
+import { CalendarWithSwipe } from '@/components/CalendarWithSwipe';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/theme';
 import {
   expInCurrentLevel,
   expNeededForNextLevel,
   levelFromTotalExp,
 } from '@/utils/levelExp';
+import { getAchievementProgress, mergeAchievementsForDisplay } from '@/utils/achievements';
 
 type RecordModalType = 'quest' | 'earn' | 'spend' | null;
 
@@ -29,7 +32,18 @@ export default function SettingsScreen() {
   const transactions = useStore((s) => s.transactions);
   const resetGold = useStore((s) => s.resetGold);
   const resetProgress = useStore((s) => s.resetProgress);
+  const updateUserProfile = useStore((s) => s.updateUserProfile);
+  const streakCount = useStore((s) => s.streakCount);
+  const storedAchievements = useStore((s) => s.achievements);
+  const achievements = useMemo(() => mergeAchievementsForDisplay(storedAchievements), [storedAchievements]);
   const [recordModal, setRecordModal] = useState<RecordModalType>(null);
+  const [calendarModalVisible, setCalendarModalVisible] = useState(false);
+  const [showAllAchievements, setShowAllAchievements] = useState(false);
+  const [profileEditVisible, setProfileEditVisible] = useState(false);
+  const [editNickname, setEditNickname] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+
+  const unlockedTitles = achievements.filter((a) => a.unlockedAt).map((a) => a.title);
 
   const handleResetProgress = () => {
     Alert.alert(
@@ -59,6 +73,9 @@ export default function SettingsScreen() {
   const completedCount = transactions.filter((t) => t.type === 'Earn' && t.description.includes('퀘스트 완료')).length;
   const earnCount = transactions.filter((t) => t.type === 'Earn').length;
   const spendCount = transactions.filter((t) => t.type === 'Spend').length;
+  const totalGoldEarned = transactions.filter((t) => t.type === 'Earn').reduce((sum, t) => sum + t.amount, 0);
+  const totalGoldSpent = transactions.filter((t) => t.type === 'Spend').reduce((sum, t) => sum + t.amount, 0);
+  const purchaseCount = spendCount;
 
   const recordList =
     recordModal === 'quest'
@@ -73,9 +90,30 @@ export default function SettingsScreen() {
   const recordTitle =
     recordModal === 'quest' ? '완료한 퀘스트 기록' : recordModal === 'earn' ? '획득 기록' : recordModal === 'spend' ? '사용 기록' : '';
 
+  const completedDates = Array.from(
+    new Set(
+      transactions
+        .filter((t) => t.type === 'Earn' && t.description.includes('퀘스트 완료'))
+        .map((t) => t.created_at.slice(0, 10))
+    )
+  );
+
+  const achievementState = {
+    completedQuestCount: completedCount,
+    level,
+    currentGold: user.current_points,
+    streakCount,
+    totalGoldEarned,
+    totalGoldSpent,
+    purchaseCount,
+  };
+  const ACHIEVEMENT_SHOW_LIMIT = 4;
+  const visibleAchievements = showAllAchievements ? achievements : achievements.slice(0, ACHIEVEMENT_SHOW_LIMIT);
+  const hasMoreAchievements = achievements.length > ACHIEVEMENT_SHOW_LIMIT;
+
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={[styles.header, { paddingTop: Math.max(14, insets.top) }]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={[styles.header]}>
         <View>
           <Text style={styles.headerTitle}>프로필</Text>
           <Text style={styles.headerSub}>나의 성장 기록이에요 🌱</Text>
@@ -95,17 +133,159 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.profileCard, SHADOWS.card]}>
-          <View style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarText}>
-              {user.nickname.slice(0, 1)}
-            </Text>
-          </View>
+        <TouchableOpacity
+          style={[styles.profileCard, SHADOWS.card]}
+          onPress={() => {
+            setEditNickname(user.nickname);
+            setEditTitle(user.title ?? '');
+            setProfileEditVisible(true);
+          }}
+          activeOpacity={0.9}
+        >
+          <CharacterView level={level} mood="idle" size="medium" />
           <View style={styles.profileInfo}>
-            <Text style={styles.nickname}>{user.nickname}</Text>
-            <Text style={styles.email}>{user.email}</Text>
+            <View style={styles.profileNameRow}>
+              <View style={styles.profileNameTitleWrap}>
+                <Text style={styles.nickname} numberOfLines={1}>{user.nickname}</Text>
+                {user.title ? (
+                  <View style={styles.titleBadge}>
+                    <Text style={styles.titleBadgeText}>{user.title}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Pencil size={14} color={COLORS.textMuted} strokeWidth={2} />
+            </View>
+            {streakCount > 0 ? (
+              <Text style={styles.streakText}>🔥 {streakCount}일 연속 퀘스트 완료</Text>
+            ) : null}
           </View>
-        </View>
+        </TouchableOpacity>
+
+        <Modal visible={profileEditVisible} animationType="slide" transparent>
+          <Pressable style={styles.profileEditBackdrop} onPress={() => setProfileEditVisible(false)}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.profileEditKeyboard}>
+              <Pressable style={[styles.profileEditCard, { paddingBottom: Math.max(SPACING.lg, insets.bottom + 8) }]} onPress={(e) => e.stopPropagation()}>
+                <View style={styles.profileEditHeader}>
+                  <Text style={styles.profileEditTitle}>프로필 수정</Text>
+                  <TouchableOpacity onPress={() => setProfileEditVisible(false)} hitSlop={12}>
+                    <X size={24} color={COLORS.textMuted} strokeWidth={2} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.profileEditLabel}>닉네임</Text>
+                <TextInput
+                  style={styles.profileEditInput}
+                  value={editNickname}
+                  onChangeText={setEditNickname}
+                  placeholder="닉네임"
+                  placeholderTextColor={COLORS.textMuted}
+                  maxLength={12}
+                />
+                <Text style={styles.profileEditLabel}>칭호 (업적에서 해금)</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.titlePresetScroll}>
+                  <TouchableOpacity
+                    style={[styles.titlePresetChip, !editTitle && styles.titlePresetChipActive]}
+                    onPress={() => setEditTitle('')}
+                  >
+                    <Text style={[styles.titlePresetText, !editTitle && styles.titlePresetTextActive]}>칭호 없음</Text>
+                  </TouchableOpacity>
+                  {unlockedTitles.map((t) => (
+                    <TouchableOpacity
+                      key={t}
+                      style={[styles.titlePresetChip, editTitle === t && styles.titlePresetChipActive]}
+                      onPress={() => setEditTitle(t)}
+                    >
+                      <Text style={[styles.titlePresetText, editTitle === t && styles.titlePresetTextActive]}>{t}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                {unlockedTitles.length === 0 && (
+                  <Text style={styles.profileEditHint}>업적을 달성하면 칭호를 쓸 수 있어요</Text>
+                )}
+                <TouchableOpacity
+                  style={styles.profileEditSave}
+                  onPress={() => {
+                    const titleToSave = editTitle && unlockedTitles.includes(editTitle) ? editTitle : undefined;
+                    updateUserProfile({ nickname: editNickname.trim() || user.nickname, title: titleToSave });
+                    setProfileEditVisible(false);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.profileEditSaveText}>저장</Text>
+                </TouchableOpacity>
+              </Pressable>
+            </KeyboardAvoidingView>
+          </Pressable>
+        </Modal>
+
+        {achievements.length > 0 && (
+          <View style={[styles.achievementsCard, SHADOWS.card]}>
+            <View style={styles.achievementsHeader}>
+              <Trophy size={18} color={COLORS.gold} strokeWidth={2} />
+              <Text style={styles.sectionTitle}>업적</Text>
+            </View>
+            <View style={styles.achievementsList}>
+              {visibleAchievements.map((a) => {
+                const progress = !a.unlockedAt ? getAchievementProgress(a.id, achievementState) : null;
+                return (
+                  <View key={a.id} style={[styles.achievementRow, !a.unlockedAt && styles.achievementRowLocked]}>
+                    <Text style={styles.achievementEmoji}>{a.unlockedAt ? '🏆' : '🔒'}</Text>
+                    <View style={styles.achievementTextWrap}>
+                      <Text style={[styles.achievementTitle, !a.unlockedAt && styles.achievementTitleLocked]}>{a.title}</Text>
+                      {a.unlockedAt && a.description ? (
+                        <Text style={styles.achievementDesc}>{a.description}</Text>
+                      ) : progress ? (
+                        <Text style={styles.achievementProgress}>
+                          {progress.current} / {progress.target}
+                        </Text>
+                      ) : a.description ? (
+                        <Text style={styles.achievementDesc}>{a.description}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+            {hasMoreAchievements && (
+              <TouchableOpacity
+                style={styles.achievementExpandBtn}
+                onPress={() => setShowAllAchievements(!showAllAchievements)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.achievementExpandText}>
+                  {showAllAchievements ? '접기' : `나머지 업적 보기`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.calendarButton, SHADOWS.card]}
+          onPress={() => setCalendarModalVisible(true)}
+          activeOpacity={0.85}
+        >
+          <Calendar size={22} color={COLORS.gold} strokeWidth={2} />
+          <Text style={styles.calendarButtonText}>퀘스트 달력</Text>
+        </TouchableOpacity>
+
+        <Modal
+          visible={calendarModalVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setCalendarModalVisible(false)}
+        >
+          <Pressable style={styles.calendarModalBackdrop} onPress={() => setCalendarModalVisible(false)}>
+            <Pressable style={styles.calendarModalCard} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.calendarModalHeader}>
+                <Text style={styles.calendarModalTitle}>퀘스트 달력</Text>
+                <TouchableOpacity onPress={() => setCalendarModalVisible(false)} hitSlop={12}>
+                  <X size={24} color={COLORS.textMuted} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+              <CalendarWithSwipe completedDates={completedDates} />
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         <View style={[styles.levelCard, SHADOWS.card]}>
           <View style={styles.levelHeader}>
@@ -219,7 +399,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.sm,
     paddingTop: SPACING.xs + 4,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.bg,
     borderBottomLeftRadius: RADIUS.lg,
     borderBottomRightRadius: RADIUS.lg,
     ...(Platform.OS === 'android' && {
@@ -256,7 +436,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     padding: SPACING.md,
-    paddingBottom: SPACING.xxl + 24,
+    paddingBottom: SPACING.lg,
   },
   profileCard: {
     flexDirection: 'row',
@@ -266,6 +446,111 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     marginBottom: SPACING.md,
     gap: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  profileNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  profileNameTitleWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    minWidth: 0,
+  },
+  titleBadge: {
+    backgroundColor: COLORS.goldLight + 'cc',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  titleBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.goldDark,
+  },
+  profileEditBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  profileEditKeyboard: {
+    width: '100%',
+  },
+  profileEditCard: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    padding: SPACING.xl,
+  },
+  profileEditHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xl,
+  },
+  profileEditTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  profileEditLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+  },
+  profileEditHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: -SPACING.xs,
+    marginBottom: SPACING.lg,
+  },
+  profileEditInput: {
+    backgroundColor: COLORS.bgSecondary,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    fontSize: 16,
+    color: COLORS.text,
+    marginBottom: SPACING.lg,
+  },
+  titlePresetScroll: {
+    marginBottom: SPACING.sm,
+    maxHeight: 44,
+  },
+  titlePresetChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.bgSecondary,
+    marginRight: SPACING.sm,
+  },
+  titlePresetChipActive: {
+    backgroundColor: COLORS.goldLight,
+  },
+  titlePresetText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  titlePresetTextActive: {
+    color: COLORS.goldDark,
+    fontWeight: '700',
+  },
+  profileEditSave: {
+    backgroundColor: COLORS.gold,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+  },
+  profileEditSaveText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.surface,
   },
   avatarPlaceholder: {
     width: 56,
@@ -288,11 +573,122 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
     letterSpacing: -0.2,
+    flexShrink: 1,
   },
   email: {
     fontSize: 14,
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+  streakText: {
+    fontSize: 12,
+    color: COLORS.goldDark,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  achievementsCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
+  achievementsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  achievementsList: {
+    gap: SPACING.sm,
+  },
+  achievementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.bgSecondary,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.xs,
+  },
+  achievementRowLocked: {
+    opacity: 0.7,
+  },
+  achievementEmoji: {
+    fontSize: 20,
+    marginRight: SPACING.sm,
+  },
+  achievementTextWrap: {
+    flex: 1,
+  },
+  achievementTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  achievementTitleLocked: {
+    color: COLORS.textMuted,
+  },
+  achievementDesc: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  achievementProgress: {
+    fontSize: 12,
+    color: COLORS.goldDark,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  achievementExpandBtn: {
+    marginTop: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+  },
+  achievementExpandText: {
+    fontSize: 13,
+    color: COLORS.goldDark,
+    fontWeight: '600',
+  },
+  calendarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
+    marginBottom: SPACING.md,
+  },
+  calendarButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  calendarModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: SPACING.xl,
+  },
+  calendarModalCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.lg,
+    maxHeight: '80%',
+  },
+  calendarModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  calendarModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
   },
   levelCard: {
     backgroundColor: COLORS.card,

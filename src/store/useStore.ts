@@ -1,12 +1,24 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { User, Quest, Reward, Transaction, ToastMessage } from '@/types';
+import type { User, Quest, Reward, Transaction, ToastMessage, Achievement } from '@/types';
 import { levelFromTotalExp } from '@/utils/levelExp';
+import {
+  ACHIEVEMENT_DEFINITIONS,
+  checkAchievementConditions,
+} from '@/utils/achievements';
+
+function mergeAchievements(existing: Achievement[]): Achievement[] {
+  return ACHIEVEMENT_DEFINITIONS.map((def) => {
+    const found = existing?.find((a) => a.id === def.id);
+    return found ? { ...def, unlockedAt: found.unlockedAt } : { ...def };
+  });
+}
 
 interface QuestBoardState {
   user: User | null;
   setUser: (user: User | null) => void;
+  updateUserProfile: (payload: { nickname?: string; title?: string }) => void;
 
   addPoints: (amount: number, description: string) => void;
   spendPoints: (amount: number, description: string) => boolean;
@@ -48,6 +60,14 @@ interface QuestBoardState {
   /** 레벨업 시 표시용 (persist 제외), 0이면 미표시 */
   levelUpAmount: number;
   setLevelUpCleared: () => void;
+
+  /** 스트릭 & 업적 & 일일 보너스 */
+  streakCount: number;
+  lastStreakDate: string | null; // YYYY-MM-DD
+  lastDailyBonusDate: string | null;
+  achievements: Achievement[];
+  checkAchievements: () => void;
+  claimDailyBonus: () => boolean;
 }
 
 const defaultUser: User = {
@@ -65,6 +85,17 @@ export const useStore = create<QuestBoardState>()(
     (set, get) => ({
       user: defaultUser,
       setUser: (user) => set({ user }),
+      updateUserProfile: (payload) => {
+        const { user } = get();
+        if (!user) return;
+        set({
+          user: {
+            ...user,
+            ...(payload.nickname !== undefined && { nickname: payload.nickname.trim() || user.nickname }),
+            ...(payload.title !== undefined && { title: payload.title.trim() || undefined }),
+          },
+        });
+      },
 
       addPoints: (amount, description) => {
         const { user, addTransaction } = get();
@@ -172,13 +203,23 @@ export const useStore = create<QuestBoardState>()(
         const quest = quests.find((q) => q.id === questId);
         if (!quest || !user || quest.is_completed) return false;
         addPoints(quest.points_reward, `퀘스트 완료: ${quest.title}`);
+        const today = new Date().toISOString().slice(0, 10);
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        const { streakCount, lastStreakDate } = get();
+        let newStreak = streakCount;
+        if (lastStreakDate !== today) {
+          newStreak = lastStreakDate === yesterday ? streakCount + 1 : 1;
+        }
         set({
           quests: quests.map((q) =>
             q.id === questId
               ? { ...q, is_completed: true, completed_at: new Date().toISOString() }
               : q
           ),
+          streakCount: newStreak,
+          lastStreakDate: today,
         });
+        get().checkAchievements();
         return true;
       },
 
@@ -265,6 +306,7 @@ export const useStore = create<QuestBoardState>()(
             r.id === rewardId ? { ...r, stock_count: Math.max(0, r.stock_count - 1) } : r
           ),
         });
+        get().checkAchievements();
         return true;
       },
 
@@ -283,6 +325,66 @@ export const useStore = create<QuestBoardState>()(
 
       levelUpAmount: 0,
       setLevelUpCleared: () => set({ levelUpAmount: 0 }),
+
+      streakCount: 0,
+      lastStreakDate: null,
+      lastDailyBonusDate: null,
+      achievements: mergeAchievements([]),
+
+      checkAchievements: () => {
+        const { user, transactions, streakCount } = get();
+        if (!user) return;
+        const completedQuestCount = transactions.filter(
+          (t) => t.type === 'Earn' && t.description.includes('퀘스트 완료')
+        ).length;
+        const totalGoldEarned = transactions
+          .filter((t) => t.type === 'Earn')
+          .reduce((sum, t) => sum + t.amount, 0);
+        const totalGoldSpent = transactions
+          .filter((t) => t.type === 'Spend')
+          .reduce((sum, t) => sum + t.amount, 0);
+        const purchaseCount = transactions.filter((t) => t.type === 'Spend').length;
+        const state = {
+          completedQuestCount,
+          level: user.level,
+          currentGold: user.current_points,
+          streakCount,
+          totalGoldEarned,
+          totalGoldSpent,
+          purchaseCount,
+        };
+        const existing = get().achievements;
+        const merged: Achievement[] = mergeAchievements(existing ?? []);
+        const now = new Date().toISOString();
+        let updated = false;
+        const next = merged.map((a) => {
+          if (a.unlockedAt) return a;
+          if (!checkAchievementConditions(a.id, state)) return a;
+          updated = true;
+          return { ...a, unlockedAt: now };
+        });
+        set({ achievements: next });
+        if (updated) {
+          const newlyUnlocked = next.find((a) => a.unlockedAt === now);
+          if (newlyUnlocked) {
+            get().addToast({
+              type: 'success',
+              text: `🏆 업적 달성: ${newlyUnlocked.title}`,
+              duration: 3000,
+            });
+          }
+        }
+      },
+
+      claimDailyBonus: () => {
+        const { user, lastDailyBonusDate, addPoints } = get();
+        if (!user) return false;
+        const today = new Date().toISOString().slice(0, 10);
+        if (lastDailyBonusDate === today) return false;
+        addPoints(50, '일일 출석 보너스');
+        set({ lastDailyBonusDate: today });
+        return true;
+      },
     }),
     {
       name: 'questboard-storage',
@@ -292,6 +394,10 @@ export const useStore = create<QuestBoardState>()(
         quests: s.quests,
         rewards: s.rewards,
         transactions: s.transactions,
+        streakCount: s.streakCount,
+        lastStreakDate: s.lastStreakDate,
+        lastDailyBonusDate: s.lastDailyBonusDate,
+        achievements: s.achievements,
       }),
     }
   )

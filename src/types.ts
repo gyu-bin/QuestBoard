@@ -13,6 +13,8 @@ export interface User {
   id: string;
   email: string;
   nickname: string;
+  /** 사용자 칭호 (커스텀) */
+  title?: string;
   level: number;
   total_exp: number;
   current_points: number;
@@ -60,4 +62,12 @@ export interface ToastMessage {
   type: ToastType;
   text: string;
   duration?: number;
+}
+
+// ============ 업적 ============
+export interface Achievement {
+  id: string;
+  title: string;
+  description?: string;
+  unlockedAt?: string; // ISO date, 있으면 해금됨
 }

@@ -16,9 +16,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics';
 import { CheckCircle2, Coins, Plus, Repeat, Sparkles, Trash2, X } from 'lucide-react-native';
 import { useStore } from '@/store/useStore';
-import { CelebrationLottie } from '@/components/CelebrationLottie';
+import { QuestCompleteOverlay } from '@/components/QuestCompleteOverlay';
 import { LevelUpEffect } from '@/components/LevelUpEffect';
+import { levelFromTotalExp } from '@/utils/levelExp';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/theme';
+import { getTodayLabel } from '@/utils/date';
 import type { Quest, QuestDifficulty, RepeatType } from '@/types';
 
 const DIFFICULTY_MAP: Record<
@@ -48,7 +50,11 @@ export default function QuestBoardScreen() {
   const addQuest = useStore((s) => s.addQuest);
   const levelUpAmount = useStore((s) => s.levelUpAmount);
   const setLevelUpCleared = useStore((s) => s.setLevelUpCleared);
+  const streakCount = useStore((s) => s.streakCount);
+  const claimDailyBonus = useStore((s) => s.claimDailyBonus);
+  const lastDailyBonusDate = useStore((s) => s.lastDailyBonusDate);
   const [celebrationVisible, setCelebrationVisible] = useState(false);
+  const [lastEarnedGold, setLastEarnedGold] = useState(0);
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -64,6 +70,7 @@ export default function QuestBoardScreen() {
       const ok = completeQuest(quest.id);
       if (ok) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setLastEarnedGold(quest.points_reward);
         setCelebrationVisible(true);
       }
     } finally {
@@ -90,26 +97,44 @@ export default function QuestBoardScreen() {
     setAddModalVisible(false);
   };
 
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const canClaimDaily = lastDailyBonusDate !== todayKey;
+
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={[styles.header, { paddingTop: Math.max(14, insets.top) }]}>
-        <View style={styles.headerLeft}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {canClaimDaily && (
+        <TouchableOpacity
+          style={styles.dailyBanner}
+          onPress={() => claimDailyBonus()}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.dailyBannerText}>🎁 오늘 출석 보너스 +50 G 받기</Text>
+        </TouchableOpacity>
+      )}
+      <View style={[styles.header, { paddingTop: SPACING.md }]}>
+        <Text style={styles.headerDate}>{getTodayLabel()}</Text>
+        <View style={styles.headerTopRow}>
           <Text style={styles.headerGreeting}>오늘의 퀘스트</Text>
-          <Text style={styles.headerSub}>완료하면 골드를 받아요 ✨</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() => setAddModalVisible(true)}
-            activeOpacity={0.85}
-          >
-            <Plus size={20} color={COLORS.surface} strokeWidth={2.5} />
-            <Text style={styles.addBtnText}>추가</Text>
-          </TouchableOpacity>
-          <View style={styles.goldBadge}>
-            <Coins size={18} color={COLORS.gold} strokeWidth={2.5} />
-            <Text style={styles.goldValue}>{user?.current_points ?? 0}</Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => setAddModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <Plus size={20} color={COLORS.surface} strokeWidth={2.5} />
+              <Text style={styles.addBtnText}>추가</Text>
+            </TouchableOpacity>
+            <View style={styles.goldBadge}>
+              <Coins size={18} color={COLORS.gold} strokeWidth={2.5} />
+              <Text style={styles.goldValue}>{user?.current_points ?? 0}</Text>
+            </View>
           </View>
+        </View>
+        <View style={styles.headerSubRow}>
+          <Text style={styles.headerSub}>완료하면 골드를 받아요 ✨</Text>
+          {streakCount > 0 && (
+            <Text style={styles.streakBadge}>🔥 {streakCount}일 연속</Text>
+          )}
         </View>
       </View>
 
@@ -179,21 +204,31 @@ export default function QuestBoardScreen() {
                   <Text style={styles.points}>+{q.points_reward}</Text>
                 </View>
                 {!q.is_completed ? (
-                  <TouchableOpacity
-                    style={styles.completeBtn}
-                    onPress={() => handleComplete(q)}
-                    disabled={!!completingId}
-                    activeOpacity={0.85}
-                  >
-                    {completingId === q.id ? (
-                      <ActivityIndicator size="small" color={COLORS.surface} />
-                    ) : (
-                      <>
-                        <CheckCircle2 size={18} color={COLORS.surface} strokeWidth={2.5} />
-                        <Text style={styles.completeBtnText}>완료하기</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                  <View style={styles.incompleteRow}>
+                    <TouchableOpacity
+                      style={styles.completeBtn}
+                      onPress={() => handleComplete(q)}
+                      disabled={!!completingId}
+                      activeOpacity={0.85}
+                    >
+                      {completingId === q.id ? (
+                        <ActivityIndicator size="small" color={COLORS.surface} />
+                      ) : (
+                        <>
+                          <CheckCircle2 size={18} color={COLORS.surface} strokeWidth={2.5} />
+                          <Text style={styles.completeBtnText}>완료하기</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteBtn}
+                      onPress={() => deleteQuest(q.id)}
+                      hitSlop={8}
+                      activeOpacity={0.7}
+                    >
+                      <Trash2 size={18} color={COLORS.textMuted} strokeWidth={2} />
+                    </TouchableOpacity>
+                  </View>
                 ) : (
                   <View style={styles.doneRow}>
                     <TouchableOpacity
@@ -337,8 +372,10 @@ export default function QuestBoardScreen() {
         </Pressable>
       </Modal>
 
-      <CelebrationLottie
+      <QuestCompleteOverlay
         visible={celebrationVisible}
+        earnedGold={lastEarnedGold}
+        level={user ? levelFromTotalExp(user.total_exp) : 1}
         onFinish={() => setCelebrationVisible(false)}
       />
       <LevelUpEffect
@@ -356,10 +393,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.xl,
+    paddingLeft: SPACING.xl,
+    paddingRight: 10,
     paddingVertical: SPACING.sm,
     paddingTop: SPACING.xs + 4,
     backgroundColor: COLORS.surface,
@@ -373,11 +408,47 @@ const styles = StyleSheet.create({
       shadowRadius: 8,
     }),
   },
-  headerLeft: {},
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  headerSubRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: SPACING.sm,
+  },
+  streakBadge: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.goldDark,
+    backgroundColor: COLORS.goldLight + 'cc',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  dailyBanner: {
+    backgroundColor: COLORS.goldLight,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gold + '44',
+  },
+  dailyBannerText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.goldDark,
+  },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  headerDate: {
+    fontSize: 13,
+    color: COLORS.textMuted,
   },
   headerGreeting: {
     fontSize: 18,
@@ -421,7 +492,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     padding: SPACING.lg,
-    paddingBottom: SPACING.xxl + 24,
+    paddingBottom: SPACING.lg,
   },
   empty: {
     padding: SPACING.xxl * 2,
@@ -540,6 +611,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: COLORS.surface,
+  },
+  incompleteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
   doneRow: {
     flexDirection: 'row',

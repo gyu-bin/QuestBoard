@@ -13,9 +13,10 @@ export default function RootLayout() {
   // 저장된 데이터 복원 후, 퀘스트/보상이 비어 있으면 목업으로 초기화
   useEffect(() => {
     const unsub = useStore.persist.onFinishHydration(() => {
-      const { quests, rewards } = useStore.getState();
+      const { quests, rewards, checkAchievements } = useStore.getState();
       if (quests.length === 0) setQuests(mockQuests);
       if (rewards.length === 0) setRewards(mockRewards);
+      checkAchievements();
     });
     return unsub;
   }, [setQuests, setRewards]);

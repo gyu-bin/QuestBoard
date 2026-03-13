@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { Coins, Gift, Plus, ShoppingBag, Trash2, X } from 'lucide-react-native';
 import { useStore } from '@/store/useStore';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/theme';
+import { getTodayLabel } from '@/utils/date';
 import type { Reward } from '@/types';
 
 export default function ShopScreen() {
@@ -67,9 +68,10 @@ export default function ShopScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={[styles.header, { paddingTop: Math.max(14, insets.top) }]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={[styles.header, { paddingTop: SPACING.xl }]}>
         <View>
+          <Text style={styles.headerDate}>{getTodayLabel()}</Text>
           <Text style={styles.headerTitle}>보상 상점</Text>
           <Text style={styles.headerSub}>골드로 나만의 보상을 사요 🛒</Text>
         </View>
@@ -127,37 +129,40 @@ export default function ShopScreen() {
                     <Text style={styles.cost}>{r.cost_points}</Text>
                   </View>
                 </View>
-                {r.stock_count === 0 ? (
+                <View style={styles.cardActions}>
+                  {r.stock_count > 0 ? (
+                    <TouchableOpacity
+                      style={[styles.buyBtn, !canBuy && styles.buyBtnDisabled]}
+                      onPress={() => handlePurchase(r)}
+                      disabled={!canBuy || !!purchasingId}
+                      activeOpacity={0.85}
+                    >
+                      <ShoppingBag
+                        size={16}
+                        color={canBuy ? COLORS.surface : COLORS.textMuted}
+                        strokeWidth={2}
+                      />
+                      <Text
+                        style={[
+                          styles.buyBtnText,
+                          !canBuy && styles.buyBtnTextDisabled,
+                        ]}
+                      >
+                        {purchasingId === r.id ? '구매 중...' : '구매하기'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                   <TouchableOpacity
-                    style={styles.deleteRewardBtn}
+                    style={[styles.deleteRewardBtn, r.stock_count > 0 && styles.deleteRewardBtnIcon]}
                     onPress={() => deleteReward(r.id)}
                     activeOpacity={0.85}
                   >
-                    <Trash2 size={16} color={COLORS.surface} strokeWidth={2} />
-                    <Text style={styles.deleteRewardBtnText}>삭제</Text>
+                    <Trash2 size={r.stock_count > 0 ? 18 : 16} color={COLORS.surface} strokeWidth={2} />
+                    {r.stock_count === 0 ? (
+                      <Text style={styles.deleteRewardBtnText}>삭제</Text>
+                    ) : null}
                   </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.buyBtn, !canBuy && styles.buyBtnDisabled]}
-                    onPress={() => handlePurchase(r)}
-                    disabled={!canBuy || !!purchasingId}
-                    activeOpacity={0.85}
-                  >
-                    <ShoppingBag
-                      size={16}
-                      color={canBuy ? COLORS.surface : COLORS.textMuted}
-                      strokeWidth={2}
-                    />
-                    <Text
-                      style={[
-                        styles.buyBtnText,
-                        !canBuy && styles.buyBtnTextDisabled,
-                      ]}
-                    >
-                      {purchasingId === r.id ? '구매 중...' : '구매하기'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
+                </View>
               </View>
             );
           })
@@ -302,6 +307,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
+  headerDate: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 2,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -344,7 +354,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     padding: SPACING.lg,
-    paddingBottom: SPACING.xxl + 24,
+    paddingBottom: SPACING.lg,
   },
   empty: {
     padding: SPACING.xxl * 2,
@@ -421,11 +431,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.goldDark,
   },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
   buyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    flex: 1,
     backgroundColor: COLORS.gold,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.full,
@@ -449,7 +465,13 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: COLORS.error,
     paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
     borderRadius: RADIUS.full,
+  },
+  deleteRewardBtnIcon: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    minWidth: undefined,
   },
   deleteRewardBtnText: {
     fontSize: 15,

@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon/Gemini_Generated_Image_rg5lfvrg5lfvrg5l.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/icon/Gemini_Generated_Image_rg5lfvrg5lfvrg5l.png",
       "resizeMode": "contain",
