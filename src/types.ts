@@ -1,0 +1,63 @@
+/**
+ * QuestBoard - Core Data Types
+ * Users, Quests, Rewards, Transactions 스키마 기반 타입 정의
+ */
+
+// ============ Enums ============
+export type QuestDifficulty = 'Easy' | 'Normal' | 'Hard';
+export type RepeatType = 'Daily' | 'Weekly' | 'None';
+export type TransactionType = 'Earn' | 'Spend';
+
+// ============ User ============
+export interface User {
+  id: string;
+  email: string;
+  nickname: string;
+  level: number;
+  total_exp: number;
+  current_points: number;
+  gold_balance: number;
+}
+
+// ============ Quest ============
+export interface Quest {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  points_reward: number;
+  difficulty: QuestDifficulty;
+  is_completed: boolean;
+  created_at: string; // ISO date
+  repeat_type: RepeatType;
+  completed_at?: string; // ISO date, 반복 퀘스트 갱신 판단용
+}
+
+// ============ Reward ============
+export interface Reward {
+  id: string;
+  user_id: string;
+  title: string;
+  cost_points: number;
+  stock_count: number;
+  icon_type: string;
+}
+
+// ============ Transaction ============
+export interface Transaction {
+  id: string;
+  user_id: string;
+  type: TransactionType;
+  amount: number;
+  description: string;
+  created_at: string;
+}
+
+// ============ UI / Store 보조 타입 ============
+export type ToastType = 'success' | 'error' | 'info';
+export interface ToastMessage {
+  id: string;
+  type: ToastType;
+  text: string;
+  duration?: number;
+}

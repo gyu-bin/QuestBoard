@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "QuestBoard",
+    "slug": "questboard",
+    "version": "1.0.0",
+    "scheme": "questboard",
+    "orientation": "portrait",
+    "icon": "./assets/icon/Gemini_Generated_Image_rg5lfvrg5lfvrg5l.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/icon/Gemini_Generated_Image_rg5lfvrg5lfvrg5l.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF8F6"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.questboard.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon/Gemini_Generated_Image_rg5lfvrg5lfvrg5l.png",
+        "backgroundColor": "#FAF8F6"
+      },
+      "package": "com.questboard.app"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": ["expo-router"]
+  }
+}
