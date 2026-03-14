@@ -39,13 +39,48 @@ export const ACHIEVEMENT_DEFINITIONS: Omit<Achievement, 'unlockedAt'>[] = [
 
 export type AchievementId = (typeof ACHIEVEMENT_DEFINITIONS)[number]['id'];
 
-/** 저장된 업적과 최신 정의를 병합해 화면에 항상 전체 목록 표시 */
+/** 프로필 표시 순서: 쉬운 것부터 (id 순서대로) */
+const ACHIEVEMENT_DISPLAY_ORDER: AchievementId[] = [
+  'first_quest',
+  'quest_5',
+  'quest_10',
+  'level_3',
+  'level_5',
+  'streak_3',
+  'first_purchase',
+  'gold_100',
+  'quest_30',
+  'level_10',
+  'streak_7',
+  'gold_500',
+  'total_earned_500',
+  'shopper_5',
+  'quest_50',
+  'level_15',
+  'gold_1000',
+  'streak_14',
+  'spent_500',
+  'quest_100',
+  'level_20',
+  'gold_2000',
+  'total_earned_2000',
+  'shopper_20',
+  'spent_1000',
+];
+
+/** 저장된 업적과 최신 정의를 병합해 화면에 항상 전체 목록 표시 (쉬운 순서) */
 export function mergeAchievementsForDisplay(
   existing: { id: string; unlockedAt?: string | null }[] | null | undefined
 ): Achievement[] {
-  return ACHIEVEMENT_DEFINITIONS.map((def) => {
+  const merged = ACHIEVEMENT_DEFINITIONS.map((def) => {
     const found = existing?.find((a) => a.id === def.id);
     return { ...def, unlockedAt: found?.unlockedAt };
+  });
+  const orderMap = new Map(ACHIEVEMENT_DISPLAY_ORDER.map((id, i) => [id, i]));
+  return [...merged].sort((a, b) => {
+    const orderA = orderMap.get(a.id as AchievementId) ?? 999;
+    const orderB = orderMap.get(b.id as AchievementId) ?? 999;
+    return orderA - orderB;
   });
 }
 

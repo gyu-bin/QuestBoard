@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { User, Quest, Reward, Transaction, ToastMessage, Achievement } from '@/types';
+import type { User, Quest, Reward, Transaction, ToastMessage, Achievement, CharacterType, QuestCategory } from '@/types';
+import { TRAIT_BONUS_RATE } from '@/constants/character';
 import { levelFromTotalExp } from '@/utils/levelExp';
 import {
   ACHIEVEMENT_DEFINITIONS,
@@ -18,7 +19,7 @@ function mergeAchievements(existing: Achievement[]): Achievement[] {
 interface QuestBoardState {
   user: User | null;
   setUser: (user: User | null) => void;
-  updateUserProfile: (payload: { nickname?: string; title?: string }) => void;
+  updateUserProfile: (payload: { nickname?: string; title?: string; characterType?: CharacterType | null }) => void;
 
   addPoints: (amount: number, description: string) => void;
   spendPoints: (amount: number, description: string) => boolean;
@@ -33,8 +34,10 @@ interface QuestBoardState {
     points_reward: number;
     difficulty: Quest['difficulty'];
     repeat_type: Quest['repeat_type'];
+    category?: QuestCategory;
   }) => void;
-  completeQuest: (questId: string) => boolean;
+  /** 퀘스트 완료. 성공 시 지급된 골드 수 반환, 실패 시 false */
+  completeQuest: (questId: string) => number | false;
   uncompleteQuest: (questId: string) => boolean;
   deleteQuest: (questId: string) => void;
   resetRepeatQuestsIfNeeded: () => void;
@@ -93,6 +96,7 @@ export const useStore = create<QuestBoardState>()(
             ...user,
             ...(payload.nickname !== undefined && { nickname: payload.nickname.trim() || user.nickname }),
             ...(payload.title !== undefined && { title: payload.title.trim() || undefined }),
+            ...(payload.characterType !== undefined && { characterType: payload.characterType }),
           },
         });
       },
@@ -194,15 +198,24 @@ export const useStore = create<QuestBoardState>()(
           repeat_type: input.repeat_type,
           is_completed: false,
           created_at: new Date().toISOString(),
+          category: input.category ?? 'none',
         };
         set({ quests: [newQuest, ...quests] });
       },
 
       completeQuest: (questId) => {
-        const { quests, user, addPoints } = get();
+        const { quests, user, addPoints, addToast } = get();
         const quest = quests.find((q) => q.id === questId);
         if (!quest || !user || quest.is_completed) return false;
-        addPoints(quest.points_reward, `퀘스트 완료: ${quest.title}`);
+        const category = quest.category ?? 'none';
+        const traitMatch = category !== 'none' && user.characterType === category;
+        const finalGold = traitMatch
+          ? Math.round(quest.points_reward * TRAIT_BONUS_RATE)
+          : quest.points_reward;
+        addPoints(finalGold, `퀘스트 완료: ${quest.title}`);
+        if (traitMatch) {
+          addToast({ type: 'success', text: `특성 보너스! +${finalGold - quest.points_reward} G`, duration: 2000 });
+        }
         const today = new Date().toISOString().slice(0, 10);
         const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
         const { streakCount, lastStreakDate } = get();
@@ -220,14 +233,19 @@ export const useStore = create<QuestBoardState>()(
           lastStreakDate: today,
         });
         get().checkAchievements();
-        return true;
+        return finalGold;
       },
 
       uncompleteQuest: (questId) => {
         const { quests, user } = get();
         const quest = quests.find((q) => q.id === questId);
         if (!quest || !user || !quest.is_completed) return false;
-        const newPoints = Math.max(0, user.current_points - quest.points_reward);
+        const category = quest.category ?? 'none';
+        const traitMatch = category !== 'none' && user.characterType === category;
+        const amountToSubtract = traitMatch
+          ? Math.round(quest.points_reward * TRAIT_BONUS_RATE)
+          : quest.points_reward;
+        const newPoints = Math.max(0, user.current_points - amountToSubtract);
         set({
           user: {
             ...user,

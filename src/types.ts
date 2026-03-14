@@ -8,6 +8,11 @@ export type QuestDifficulty = 'Easy' | 'Normal' | 'Hard';
 export type RepeatType = 'Daily' | 'Weekly' | 'None';
 export type TransactionType = 'Earn' | 'Spend';
 
+/** 사용자 특성 (온보딩에서 1개 선택) - 매칭 퀘스트 완료 시 골드 +10% */
+export type CharacterType = 'fitness' | 'knowledge' | 'creative' | 'life';
+/** 퀘스트 카테고리 (특성 보너스 매칭용) */
+export type QuestCategory = CharacterType | 'none';
+
 // ============ User ============
 export interface User {
   id: string;
@@ -15,6 +20,8 @@ export interface User {
   nickname: string;
   /** 사용자 칭호 (커스텀) */
   title?: string;
+  /** 선택한 특성 - 매칭 퀘스트 완료 시 골드 +10% */
+  characterType?: CharacterType | null;
   level: number;
   total_exp: number;
   current_points: number;
@@ -33,6 +40,8 @@ export interface Quest {
   created_at: string; // ISO date
   repeat_type: RepeatType;
   completed_at?: string; // ISO date, 반복 퀘스트 갱신 판단용
+  /** 카테고리 - 사용자 특성과 일치 시 골드 +10% */
+  category?: QuestCategory;
 }
 
 // ============ Reward ============

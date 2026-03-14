@@ -21,7 +21,8 @@ import { LevelUpEffect } from '@/components/LevelUpEffect';
 import { levelFromTotalExp } from '@/utils/levelExp';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/theme';
 import { getTodayLabel } from '@/utils/date';
-import type { Quest, QuestDifficulty, RepeatType } from '@/types';
+import { QUEST_CATEGORIES, getCategoryLabel } from '@/constants/character';
+import type { Quest, QuestDifficulty, RepeatType, QuestCategory } from '@/types';
 
 const DIFFICULTY_MAP: Record<
   QuestDifficulty,
@@ -62,15 +63,16 @@ export default function QuestBoardScreen() {
   const [newPoints, setNewPoints] = useState('15');
   const [newDifficulty, setNewDifficulty] = useState<QuestDifficulty>('Normal');
   const [newRepeat, setNewRepeat] = useState<RepeatType>('Daily');
+  const [newCategory, setNewCategory] = useState<QuestCategory>('none');
 
   const handleComplete = async (quest: Quest) => {
     if (quest.is_completed || completingId) return;
     setCompletingId(quest.id);
     try {
-      const ok = completeQuest(quest.id);
-      if (ok) {
+      const gold = completeQuest(quest.id);
+      if (gold !== false) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setLastEarnedGold(quest.points_reward);
+        setLastEarnedGold(gold);
         setCelebrationVisible(true);
       }
     } finally {
@@ -88,12 +90,14 @@ export default function QuestBoardScreen() {
       points_reward: points,
       difficulty: newDifficulty,
       repeat_type: newRepeat,
+      category: newCategory,
     });
     setNewTitle('');
     setNewDesc('');
     setNewPoints('15');
     setNewDifficulty('Normal');
     setNewRepeat('Daily');
+    setNewCategory('none');
     setAddModalVisible(false);
   };
 
@@ -172,6 +176,11 @@ export default function QuestBoardScreen() {
                   {q.title}
                 </Text>
                 <View style={styles.badges}>
+                  {q.category && q.category !== 'none' ? (
+                    <View style={styles.categoryBadge}>
+                      <Text style={styles.categoryBadgeText}>{getCategoryLabel(q.category)}</Text>
+                    </View>
+                  ) : null}
                   <View
                     style={[
                       styles.difficultyBadge,
@@ -351,6 +360,29 @@ export default function QuestBoardScreen() {
                         style={[
                           styles.modalChipText,
                           newRepeat === value && { color: COLORS.goldDark, fontWeight: '600' },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.modalLabel}>카테고리</Text>
+                <Text style={styles.modalHint}>내 특성과 맞으면 완료 시 골드 +10%</Text>
+                <View style={styles.modalRow}>
+                  {QUEST_CATEGORIES.map(({ value, label }) => (
+                    <TouchableOpacity
+                      key={value}
+                      style={[
+                        styles.modalChip,
+                        newCategory === value && { backgroundColor: COLORS.goldLight + '99' },
+                      ]}
+                      onPress={() => setNewCategory(value)}
+                    >
+                      <Text
+                        style={[
+                          styles.modalChipText,
+                          newCategory === value && { color: COLORS.goldDark, fontWeight: '600' },
                         ]}
                       >
                         {label}
@@ -562,6 +594,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  categoryBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.goldLight + '99',
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.goldDark,
+  },
   repeatBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -684,6 +727,11 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: 6,
     marginTop: 12,
+  },
+  modalHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginBottom: 8,
   },
   modalInput: {
     backgroundColor: COLORS.bg,

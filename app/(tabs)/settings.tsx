@@ -12,6 +12,8 @@ import {
   levelFromTotalExp,
 } from '@/utils/levelExp';
 import { getAchievementProgress, mergeAchievementsForDisplay } from '@/utils/achievements';
+import { CHARACTER_TYPES, getCharacterLabel } from '@/constants/character';
+import type { CharacterType } from '@/types';
 
 type RecordModalType = 'quest' | 'earn' | 'spend' | null;
 
@@ -42,6 +44,7 @@ export default function SettingsScreen() {
   const [profileEditVisible, setProfileEditVisible] = useState(false);
   const [editNickname, setEditNickname] = useState('');
   const [editTitle, setEditTitle] = useState('');
+  const [editCharacterType, setEditCharacterType] = useState<CharacterType | null>(null);
 
   const unlockedTitles = achievements.filter((a) => a.unlockedAt).map((a) => a.title);
 
@@ -138,6 +141,7 @@ export default function SettingsScreen() {
           onPress={() => {
             setEditNickname(user.nickname);
             setEditTitle(user.title ?? '');
+            setEditCharacterType(user.characterType ?? null);
             setProfileEditVisible(true);
           }}
           activeOpacity={0.9}
@@ -153,11 +157,24 @@ export default function SettingsScreen() {
                   </View>
                 ) : null}
               </View>
-              <Pencil size={14} color={COLORS.textMuted} strokeWidth={2} />
+              <Pencil size={14} color={COLORS.textMuted} strokeWidth={2} />         
             </View>
             {streakCount > 0 ? (
               <Text style={styles.streakText}>🔥 {streakCount}일 연속 퀘스트 완료</Text>
             ) : null}
+            {user.characterType ? (
+              <View style={styles.roleHighlight}>
+                <Text style={styles.roleEmoji}>
+                  {CHARACTER_TYPES.find((c) => c.value === user.characterType)?.emoji}
+                </Text>
+                <View style={styles.roleTextWrap}>
+                  <Text style={styles.roleLabel}>나의 역할</Text>
+                  <Text style={styles.roleName}>{getCharacterLabel(user.characterType)}</Text>
+                  <Text style={styles.roleBonus}>맞는 퀘스트 완료 시 골드 +10%</Text>
+                </View>
+              </View>
+            ) : null}
+            
           </View>
         </TouchableOpacity>
 
@@ -201,11 +218,29 @@ export default function SettingsScreen() {
                 {unlockedTitles.length === 0 && (
                   <Text style={styles.profileEditHint}>업적을 달성하면 칭호를 쓸 수 있어요</Text>
                 )}
+                <Text style={styles.profileEditLabel}>특성</Text>
+                <Text style={styles.profileEditHint}>맞는 카테고리 퀘스트 완료 시 골드 +10%</Text>
+                <View style={styles.traitChipsRow}>
+                  {CHARACTER_TYPES.map((t) => (
+                    <TouchableOpacity
+                      key={t.value}
+                      style={[styles.traitChip, editCharacterType === t.value && styles.traitChipActive]}
+                      onPress={() => setEditCharacterType(t.value)}
+                    >
+                      <Text style={styles.traitChipEmoji}>{t.emoji}</Text>
+                      <Text style={[styles.traitChipText, editCharacterType === t.value && styles.traitChipTextActive]}>{t.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 <TouchableOpacity
                   style={styles.profileEditSave}
                   onPress={() => {
                     const titleToSave = editTitle && unlockedTitles.includes(editTitle) ? editTitle : undefined;
-                    updateUserProfile({ nickname: editNickname.trim() || user.nickname, title: titleToSave });
+                    updateUserProfile({
+                      nickname: editNickname.trim() || user.nickname,
+                      title: titleToSave,
+                      characterType: editCharacterType ?? undefined,
+                    });
                     setProfileEditVisible(false);
                   }}
                   activeOpacity={0.85}
@@ -440,14 +475,15 @@ const styles = StyleSheet.create({
   },
   profileCard: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
+    padding: SPACING.xl,
     marginBottom: SPACING.md,
     gap: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
+    overflow: 'hidden',
   },
   profileNameRow: {
     flexDirection: 'row',
@@ -580,10 +616,77 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: 2,
   },
+  roleHighlight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FDF8ED',
+    borderRadius: RADIUS.lg,
+    paddingVertical: SPACING.sm + 4,
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.goldLight + '80',
+  },
+  roleEmoji: {
+    fontSize: 32,
+    marginRight: SPACING.md,
+  },
+  roleTextWrap: {
+    flex: 1,
+  },
+  roleLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  roleName: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: -0.2,
+  },
+  roleBonus: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    fontWeight: '500',
+  },
   streakText: {
     fontSize: 12,
     color: COLORS.goldDark,
-    marginTop: 4,
+    marginTop: SPACING.sm,
+    fontWeight: '600',
+  },
+  traitChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  traitChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.bgSecondary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  traitChipActive: {
+    backgroundColor: COLORS.goldLight + 'cc',
+  },
+  traitChipEmoji: {
+    fontSize: 14,
+  },
+  traitChipText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+  },
+  traitChipTextActive: {
+    color: COLORS.goldDark,
     fontWeight: '600',
   },
   achievementsCard: {
