@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Alert, Modal, Pressable, TextInput, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Coins, Award, RotateCcw, RotateCw, Target, TrendingUp, X, Trophy, Calendar, Pencil } from 'lucide-react-native';
@@ -13,6 +13,7 @@ import {
 } from '@/utils/levelExp';
 import { getAchievementProgress, mergeAchievementsForDisplay } from '@/utils/achievements';
 import { CHARACTER_TYPES, getCharacterLabel } from '@/constants/character';
+import { SKINS, getSkinById } from '@/constants/skins';
 import type { CharacterType } from '@/types';
 
 type RecordModalType = 'quest' | 'earn' | 'spend' | null;
@@ -38,6 +39,13 @@ export default function SettingsScreen() {
   const streakCount = useStore((s) => s.streakCount);
   const storedAchievements = useStore((s) => s.achievements);
   const achievements = useMemo(() => mergeAchievementsForDisplay(storedAchievements), [storedAchievements]);
+  const weeklyChallenge = useStore((s) => s.weeklyChallenge);
+  const monthlyChallenge = useStore((s) => s.monthlyChallenge);
+  const ensurePeriodChallenges = useStore((s) => s.ensurePeriodChallenges);
+  const tryClaimWeeklyChallenge = useStore((s) => s.tryClaimWeeklyChallenge);
+  const tryClaimMonthlyChallenge = useStore((s) => s.tryClaimMonthlyChallenge);
+  const purchaseSkin = useStore((s) => s.purchaseSkin);
+  const equipSkin = useStore((s) => s.equipSkin);
   const [recordModal, setRecordModal] = useState<RecordModalType>(null);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [showAllAchievements, setShowAllAchievements] = useState(false);
@@ -47,6 +55,10 @@ export default function SettingsScreen() {
   const [editCharacterType, setEditCharacterType] = useState<CharacterType | null>(null);
 
   const unlockedTitles = achievements.filter((a) => a.unlockedAt).map((a) => a.title);
+
+  useEffect(() => {
+    ensurePeriodChallenges();
+  }, [ensurePeriodChallenges]);
 
   const handleResetProgress = () => {
     Alert.alert(
@@ -146,7 +158,12 @@ export default function SettingsScreen() {
           }}
           activeOpacity={0.9}
         >
-          <CharacterView level={level} mood="idle" size="medium" />
+          {/* <CharacterView
+            level={user.level}
+            mood="idle"
+            size="medium"
+            skinEmoji={getSkinById(user.equippedSkinId)?.emoji}
+          /> */}
           <View style={styles.profileInfo}>
             <View style={styles.profileNameRow}>
               <View style={styles.profileNameTitleWrap}>
@@ -219,7 +236,6 @@ export default function SettingsScreen() {
                   <Text style={styles.profileEditHint}>업적을 달성하면 칭호를 쓸 수 있어요</Text>
                 )}
                 <Text style={styles.profileEditLabel}>특성</Text>
-                <Text style={styles.profileEditHint}>맞는 카테고리 퀘스트 완료 시 골드 +10%</Text>
                 <View style={styles.traitChipsRow}>
                   {CHARACTER_TYPES.map((t) => (
                     <TouchableOpacity
@@ -232,6 +248,11 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                {editCharacterType && (
+                  <Text style={styles.traitDescription}>
+                    {CHARACTER_TYPES.find((c) => c.value === editCharacterType)?.description}
+                  </Text>
+                )}
                 <TouchableOpacity
                   style={styles.profileEditSave}
                   onPress={() => {
@@ -340,6 +361,34 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <View style={[styles.challengeCard, SHADOWS.card]}>
+          <Text style={styles.sectionTitle}>기간 챌린지</Text>
+          <View style={styles.challengeRow}>
+            <View style={styles.challengeItem}>
+              <Text style={styles.challengeLabel}>📅 이번 주 (7개 완료)</Text>
+              <Text style={styles.challengeProgress}>{weeklyChallenge.progress} / 7</Text>
+              {weeklyChallenge.progress >= 7 && !weeklyChallenge.claimed ? (
+                <TouchableOpacity style={styles.challengeClaimBtn} onPress={() => { ensurePeriodChallenges(); tryClaimWeeklyChallenge(); }} activeOpacity={0.85}>
+                  <Text style={styles.challengeClaimText}>+50 G 받기</Text>
+                </TouchableOpacity>
+              ) : weeklyChallenge.claimed ? (
+                <Text style={styles.challengeDone}>완료</Text>
+              ) : null}
+            </View>
+            <View style={styles.challengeItem}>
+              <Text style={styles.challengeLabel}>📆 이번 달 (20개 완료)</Text>
+              <Text style={styles.challengeProgress}>{monthlyChallenge.progress} / 20</Text>
+              {monthlyChallenge.progress >= 20 && !monthlyChallenge.claimed ? (
+                <TouchableOpacity style={styles.challengeClaimBtn} onPress={() => { ensurePeriodChallenges(); tryClaimMonthlyChallenge(); }} activeOpacity={0.85}>
+                  <Text style={styles.challengeClaimText}>+100 G 받기</Text>
+                </TouchableOpacity>
+              ) : monthlyChallenge.claimed ? (
+                <Text style={styles.challengeDone}>완료</Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
         <View style={[styles.statsCard, SHADOWS.card]}>
           <Text style={styles.sectionTitle}>퀘스트 통계</Text>
           <View style={styles.statsRow}>
@@ -364,6 +413,46 @@ export default function SettingsScreen() {
               <Text style={styles.statValue}>{spendCount}</Text>
               <Text style={styles.statLabel}>사용 기록</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={[styles.skinsCard, SHADOWS.card]}>
+          <Text style={styles.sectionTitle}>캐릭터 꾸미기</Text>
+          <Text style={styles.skinsHint}>골드로 악세사리를 구매하고 장착해 보세요</Text>
+          <View style={styles.skinsList}>
+            {SKINS.map((skin) => {
+              const owned = (user.ownedSkinIds ?? []).includes(skin.id);
+              const equipped = user.equippedSkinId === skin.id;
+              return (
+                <View key={skin.id} style={styles.skinRow}>
+                  <Text style={styles.skinEmoji}>{skin.emoji}</Text>
+                  <View style={styles.skinInfo}>
+                    <Text style={styles.skinName}>{skin.name}</Text>
+                    <Text style={styles.skinCost}>{skin.cost} G</Text>
+                  </View>
+                  {owned ? (
+                    <TouchableOpacity
+                      style={[styles.skinBtn, equipped && styles.skinBtnEquipped]}
+                      onPress={() => equipSkin(equipped ? null : skin.id)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.skinBtnText, equipped && styles.skinBtnTextEquipped]}>
+                        {equipped ? '장착 중' : '장착'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.skinBtn, (user.current_points < skin.cost && styles.skinBtnDisabled)]}
+                      onPress={() => purchaseSkin(skin.id)}
+                      disabled={user.current_points < skin.cost}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.skinBtnText}>구매</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
           </View>
         </View>
 
@@ -689,6 +778,12 @@ const styles = StyleSheet.create({
     color: COLORS.goldDark,
     fontWeight: '600',
   },
+  traitDescription: {
+    fontSize: 12,
+    color: COLORS.goldDark,
+    marginTop: -SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
   achievementsCard: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,
@@ -825,6 +920,113 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: COLORS.gold,
     borderRadius: RADIUS.full,
+  },
+  challengeCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  challengeRow: {
+    flexDirection: 'row',
+    gap: SPACING.lg,
+  },
+  challengeItem: {
+    flex: 1,
+    backgroundColor: COLORS.bgSecondary,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  challengeLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  challengeProgress: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  challengeClaimBtn: {
+    marginTop: SPACING.sm,
+    backgroundColor: COLORS.gold,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    alignSelf: 'flex-start',
+  },
+  challengeClaimText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.surface,
+  },
+  challengeDone: {
+    fontSize: 12,
+    color: COLORS.success,
+    fontWeight: '600',
+    marginTop: SPACING.xs,
+  },
+  skinsCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  skinsHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: -SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  skinsList: {
+    gap: SPACING.sm,
+  },
+  skinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.bgSecondary,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  skinEmoji: {
+    fontSize: 24,
+    marginRight: SPACING.md,
+  },
+  skinInfo: { flex: 1 },
+  skinName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  skinCost: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  skinBtn: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.gold,
+  },
+  skinBtnEquipped: {
+    backgroundColor: COLORS.success,
+  },
+  skinBtnDisabled: {
+    opacity: 0.5,
+  },
+  skinBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.surface,
+  },
+  skinBtnTextEquipped: {
+    color: COLORS.surface,
   },
   statsCard: {
     backgroundColor: COLORS.card,

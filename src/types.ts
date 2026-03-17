@@ -22,6 +22,10 @@ export interface User {
   title?: string;
   /** 선택한 특성 - 매칭 퀘스트 완료 시 골드 +10% */
   characterType?: CharacterType | null;
+  /** 보유 스킨 id 목록 */
+  ownedSkinIds?: string[];
+  /** 장착 중인 스킨 id */
+  equippedSkinId?: string | null;
   level: number;
   total_exp: number;
   current_points: number;

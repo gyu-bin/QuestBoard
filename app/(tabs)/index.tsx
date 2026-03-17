@@ -21,7 +21,7 @@ import { LevelUpEffect } from '@/components/LevelUpEffect';
 import { levelFromTotalExp } from '@/utils/levelExp';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/theme';
 import { getTodayLabel } from '@/utils/date';
-import { QUEST_CATEGORIES, getCategoryLabel } from '@/constants/character';
+import { QUEST_CATEGORIES_WITH_TRAIT, getCategoryLabel } from '@/constants/character';
 import type { Quest, QuestDifficulty, RepeatType, QuestCategory } from '@/types';
 
 const DIFFICULTY_MAP: Record<
@@ -54,6 +54,7 @@ export default function QuestBoardScreen() {
   const streakCount = useStore((s) => s.streakCount);
   const claimDailyBonus = useStore((s) => s.claimDailyBonus);
   const lastDailyBonusDate = useStore((s) => s.lastDailyBonusDate);
+  const dailyChallenge = useStore((s) => s.dailyChallenge);
   const [celebrationVisible, setCelebrationVisible] = useState(false);
   const [lastEarnedGold, setLastEarnedGold] = useState(0);
   const [completingId, setCompletingId] = useState<string | null>(null);
@@ -103,6 +104,13 @@ export default function QuestBoardScreen() {
 
   const todayKey = new Date().toISOString().slice(0, 10);
   const canClaimDaily = lastDailyBonusDate !== todayKey;
+  const isDailyChallengeToday = dailyChallenge.date === todayKey;
+  const dailyChallengeLabel =
+    isDailyChallengeToday && !dailyChallenge.claimed
+      ? dailyChallenge.type === 'hard'
+        ? '어려움 퀘스트 1개 완료'
+        : '퀘스트 3개 완료'
+      : null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -114,6 +122,12 @@ export default function QuestBoardScreen() {
         >
           <Text style={styles.dailyBannerText}>🎁 오늘 출석 보너스 +50 G 받기</Text>
         </TouchableOpacity>
+      )}
+      {dailyChallengeLabel && (
+        <View style={styles.dailyChallengeBanner}>
+          <Text style={styles.dailyChallengeLabel}>🎯 오늘의 도전</Text>
+          <Text style={styles.dailyChallengeDesc}>{dailyChallengeLabel} → +20 G</Text>
+        </View>
       )}
       <View style={[styles.header, { paddingTop: SPACING.md }]}>
         <Text style={styles.headerDate}>{getTodayLabel()}</Text>
@@ -368,9 +382,9 @@ export default function QuestBoardScreen() {
                   ))}
                 </View>
                 <Text style={styles.modalLabel}>카테고리</Text>
-                <Text style={styles.modalHint}>내 특성과 맞으면 완료 시 골드 +10%</Text>
+                <Text style={styles.modalHint}>프로필 특성(운동인/지식인/창작인/정비인)과 같으면 완료 시 골드 +10%</Text>
                 <View style={styles.modalRow}>
-                  {QUEST_CATEGORIES.map(({ value, label }) => (
+                  {QUEST_CATEGORIES_WITH_TRAIT.map(({ value, label, emoji }) => (
                     <TouchableOpacity
                       key={value}
                       style={[
@@ -379,6 +393,7 @@ export default function QuestBoardScreen() {
                       ]}
                       onPress={() => setNewCategory(value)}
                     >
+                      {emoji ? <Text style={styles.modalChipEmoji}>{emoji}</Text> : null}
                       <Text
                         style={[
                           styles.modalChipText,
@@ -472,6 +487,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: COLORS.goldDark,
+  },
+  dailyChallengeBanner: {
+    backgroundColor: COLORS.normalBg,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  dailyChallengeLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.goldDark,
+  },
+  dailyChallengeDesc: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   headerRight: {
     flexDirection: 'row',
@@ -751,10 +783,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   modalChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: RADIUS.full,
     backgroundColor: COLORS.bgSecondary,
+  },
+  modalChipEmoji: {
+    fontSize: 14,
   },
   modalChipText: {
     fontSize: 14,

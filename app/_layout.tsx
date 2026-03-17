@@ -3,7 +3,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useStore } from '@/store/useStore';
-import { mockQuests } from '@/data/mockQuests';
 import { mockRewards } from '@/data/mockRewards';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { COLORS } from '@/theme';
@@ -15,13 +14,19 @@ export default function RootLayout() {
   const setRewards = useStore((s) => s.setRewards);
   const resetRepeatQuestsIfNeeded = useStore((s) => s.resetRepeatQuestsIfNeeded);
 
+  /** 예전 더미 퀘스트 id 제거 (한 번만 실행되면 됨) */
+  const MOCK_QUEST_IDS = ['quest-1', 'quest-2', 'quest-3', 'quest-4', 'quest-5'];
+
   useEffect(() => {
     const finish = () => {
       setHasHydrated(true);
-      const { quests, rewards, checkAchievements } = useStore.getState();
-      if (quests.length === 0) setQuests(mockQuests);
+      const { quests, rewards, checkAchievements, ensureDailyChallenge, ensurePeriodChallenges } = useStore.getState();
+      const withoutMock = quests.filter((q) => !MOCK_QUEST_IDS.includes(q.id));
+      if (withoutMock.length !== quests.length) setQuests(withoutMock);
       if (rewards.length === 0) setRewards(mockRewards);
       checkAchievements();
+      ensureDailyChallenge();
+      ensurePeriodChallenges();
     };
 
     const unsub = useStore.persist.onFinishHydration(finish);

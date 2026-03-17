@@ -18,6 +18,15 @@ export const QUEST_CATEGORIES: { value: QuestCategory; label: string }[] = [
   { value: 'none', label: '해당 없음' },
 ];
 
+/** 퀘스트 추가 시 사용 – 특성과 같은 순서·이모지로 표시 */
+export const QUEST_CATEGORIES_WITH_TRAIT: { value: QuestCategory; label: string; emoji: string }[] = [
+  { value: 'fitness', label: '운동', emoji: '💪' },
+  { value: 'knowledge', label: '공부', emoji: '📚' },
+  { value: 'creative', label: '창작', emoji: '🎨' },
+  { value: 'life', label: '생활', emoji: '🏠' },
+  { value: 'none', label: '해당 없음', emoji: '' },
+];
+
 export const TRAIT_BONUS_RATE = 1.1;
 
 export function getCharacterLabel(type: CharacterType | null | undefined): string {
