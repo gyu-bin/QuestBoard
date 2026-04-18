@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '@/store/useStore';
 import { CHARACTER_TYPES } from '@/constants/character';
+import { CharacterTraitIcon } from '@/components/CharacterTraitIcon';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/theme';
 import type { CharacterType } from '@/types';
 
@@ -27,7 +28,9 @@ export function OnboardingScreen() {
               onPress={() => handleSelect(t.value)}
               activeOpacity={0.85}
             >
-              <Text style={styles.emoji}>{t.emoji}</Text>
+              <View style={styles.iconWrap}>
+                <CharacterTraitIcon type={t.value} size={32} color={COLORS.goldDark} />
+              </View>
               <Text style={styles.cardLabel}>{t.label}</Text>
               <Text style={styles.cardDesc}>{t.description}</Text>
             </TouchableOpacity>
@@ -70,9 +73,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.borderLight,
   },
-  emoji: {
-    fontSize: 28,
+  iconWrap: {
     marginBottom: SPACING.sm,
+    alignSelf: 'flex-start',
   },
   cardLabel: {
     fontSize: 17,

@@ -8,8 +8,15 @@ import {
   ACHIEVEMENT_DEFINITIONS,
   checkAchievementConditions,
 } from '@/utils/achievements';
+import {
+  localDateKey,
+  isQuestPeriodExpired,
+  migrateQuestFromStorage,
+} from '@/utils/questPeriod';
 import { playQuestComplete, playAchievement, playLevelUp, playPurchase, playComboBonus } from '@/utils/sound';
-import { SKINS, getSkinById } from '@/constants/skins';
+
+/** 예전 mockRewards.ts에서 넣던 항목 — 로컬 저장소에 남아 있으면 제거 */
+const LEGACY_MOCK_REWARD_IDS = new Set(['reward-1', 'reward-2', 'reward-3', 'reward-4']);
 
 function mergeAchievements(existing: Achievement[]): Achievement[] {
   return ACHIEVEMENT_DEFINITIONS.map((def) => {
@@ -22,8 +29,6 @@ interface QuestBoardState {
   user: User | null;
   setUser: (user: User | null) => void;
   updateUserProfile: (payload: { nickname?: string; title?: string; characterType?: CharacterType | null }) => void;
-  purchaseSkin: (skinId: string) => boolean;
-  equipSkin: (skinId: string | null) => void;
 
   addPoints: (amount: number, description: string) => void;
   spendPoints: (amount: number, description: string) => boolean;
@@ -38,12 +43,25 @@ interface QuestBoardState {
     points_reward: number;
     difficulty: Quest['difficulty'];
     repeat_type: Quest['repeat_type'];
+    goal_period_days?: number;
     category?: QuestCategory;
   }) => void;
   /** 퀘스트 완료. 성공 시 지급된 골드 수 반환, 실패 시 false */
   completeQuest: (questId: string) => number | false;
   uncompleteQuest: (questId: string) => boolean;
   deleteQuest: (questId: string) => void;
+  updateQuest: (
+    questId: string,
+    patch: {
+      title?: string;
+      description?: string;
+      points_reward?: number;
+      difficulty?: Quest['difficulty'];
+      repeat_type?: Quest['repeat_type'];
+      goal_period_days?: number;
+      category?: QuestCategory;
+    },
+  ) => void;
   resetRepeatQuestsIfNeeded: () => void;
 
   rewards: Reward[];
@@ -115,31 +133,6 @@ export const useStore = create<QuestBoardState>()(
             ...(payload.characterType !== undefined && { characterType: payload.characterType }),
           },
         });
-      },
-
-      purchaseSkin: (skinId) => {
-        const { user, spendPoints, addToast } = get();
-        const skin = getSkinById(skinId) ?? SKINS.find((s) => s.id === skinId);
-        if (!user || !skin) return false;
-        const owned = user.ownedSkinIds ?? [];
-        if (owned.includes(skinId)) return false;
-        if (user.current_points < skin.cost) {
-          addToast({ type: 'error', text: '골드가 부족해요 💧' });
-          return false;
-        }
-        const ok = spendPoints(skin.cost, `스킨 구매: ${skin.name}`);
-        if (!ok) return false;
-        set({ user: { ...user, ownedSkinIds: [...owned, skinId] } });
-        playPurchase();
-        return true;
-      },
-
-      equipSkin: (skinId) => {
-        const { user } = get();
-        if (!user) return;
-        const owned = user.ownedSkinIds ?? [];
-        if (skinId !== null && !owned.includes(skinId)) return;
-        set({ user: { ...user, equippedSkinId: skinId } });
       },
 
       addPoints: (amount, description) => {
@@ -216,8 +209,6 @@ export const useStore = create<QuestBoardState>()(
             total_exp: 0,
             characterType: null,
             title: undefined,
-            ownedSkinIds: [],
-            equippedSkinId: null,
           },
           quests: [],
           transactions: [],
@@ -232,11 +223,13 @@ export const useStore = create<QuestBoardState>()(
       },
 
       quests: [],
-      setQuests: (quests) => set({ quests }),
+      setQuests: (quests) => set({ quests: quests.map(migrateQuestFromStorage) }),
 
       addQuest: (input) => {
         const { user, quests } = get();
         if (!user) return;
+        const isDaily = input.repeat_type === 'Daily';
+        const periodDays = isDaily ? Math.max(1, input.goal_period_days ?? 30) : undefined;
         const newQuest: Quest = {
           id: `quest-${Date.now()}`,
           user_id: user.id,
@@ -245,6 +238,8 @@ export const useStore = create<QuestBoardState>()(
           points_reward: input.points_reward,
           difficulty: input.difficulty,
           repeat_type: input.repeat_type,
+          goal_period_days: isDaily ? periodDays : undefined,
+          completed_dates: isDaily ? [] : undefined,
           is_completed: false,
           created_at: new Date().toISOString(),
           category: input.category ?? 'none',
@@ -266,6 +261,12 @@ export const useStore = create<QuestBoardState>()(
         if (traitMatch) {
           addToast({ type: 'success', text: `특성 보너스! +${finalGold - quest.points_reward} G`, duration: 2000 });
         }
+        const todayLocal = localDateKey(new Date());
+        if (quest.repeat_type === 'Daily' && isQuestPeriodExpired(quest, new Date())) {
+          get().addToast({ type: 'info', text: '이 퀘스트의 진행 기간이 끝났어요.', duration: 2200 });
+          return false;
+        }
+
         const today = new Date().toISOString().slice(0, 10);
         const todayQuestCompletions = [...get().transactions].filter(
           (t) => t.type === 'Earn' && t.description.startsWith('퀘스트 완료:')
@@ -284,11 +285,19 @@ export const useStore = create<QuestBoardState>()(
           newStreak = lastStreakDate === yesterday ? streakCount + 1 : 1;
         }
         set({
-          quests: quests.map((q) =>
-            q.id === questId
-              ? { ...q, is_completed: true, completed_at: new Date().toISOString() }
-              : q
-          ),
+          quests: quests.map((q) => {
+            if (q.id !== questId) return q;
+            if (q.repeat_type === 'Daily') {
+              const nextDates = [...new Set([...(q.completed_dates ?? []), todayLocal])];
+              return {
+                ...q,
+                is_completed: true,
+                completed_at: new Date().toISOString(),
+                completed_dates: nextDates,
+              };
+            }
+            return { ...q, is_completed: true, completed_at: new Date().toISOString() };
+          }),
           streakCount: newStreak,
           lastStreakDate: today,
         });
@@ -333,6 +342,7 @@ export const useStore = create<QuestBoardState>()(
         const newStreakCount = todayCompletionsLeft === 0 ? Math.max(0, streakCount - 1) : streakCount;
         const newLastStreakDate = todayCompletionsLeft === 0 ? (streakCount <= 1 ? null : yesterday) : lastStreakDate;
 
+        const undoDay = quest.completed_at ? localDateKey(new Date(quest.completed_at)) : localDateKey(new Date());
         set({
           user: {
             ...user,
@@ -341,11 +351,14 @@ export const useStore = create<QuestBoardState>()(
             total_exp: newExp,
             level: newLevel,
           },
-          quests: quests.map((q) =>
-            q.id === questId
-              ? { ...q, is_completed: false, completed_at: undefined }
-              : q
-          ),
+          quests: quests.map((q) => {
+            if (q.id !== questId) return q;
+            if (q.repeat_type === 'Daily') {
+              const nextDates = (q.completed_dates ?? []).filter((d) => d !== undoDay);
+              return { ...q, is_completed: false, completed_at: undefined, completed_dates: nextDates };
+            }
+            return { ...q, is_completed: false, completed_at: undefined };
+          }),
           transactions: newTransactions,
           streakCount: newStreakCount,
           lastStreakDate: newLastStreakDate,
@@ -359,26 +372,41 @@ export const useStore = create<QuestBoardState>()(
         set({ quests: get().quests.filter((q) => q.id !== questId) });
       },
 
+      updateQuest: (questId, patch) => {
+        const { quests } = get();
+        const q = quests.find((x) => x.id === questId);
+        if (!q) return;
+        const repeat = patch.repeat_type ?? q.repeat_type;
+        const next: Quest = {
+          ...q,
+          title: patch.title !== undefined ? patch.title.trim() : q.title,
+          description: patch.description !== undefined ? patch.description.trim() : q.description,
+          points_reward: patch.points_reward !== undefined ? patch.points_reward : q.points_reward,
+          difficulty: patch.difficulty ?? q.difficulty,
+          category: patch.category ?? q.category ?? 'none',
+          repeat_type: repeat,
+        };
+        if (repeat === 'None') {
+          next.goal_period_days = undefined;
+          next.completed_dates = undefined;
+        } else {
+          next.goal_period_days = patch.goal_period_days ?? q.goal_period_days ?? 30;
+          if (q.repeat_type === 'None') next.completed_dates = [];
+        }
+        set({ quests: quests.map((x) => (x.id === questId ? next : x)) });
+      },
+
       resetRepeatQuestsIfNeeded: () => {
         const { quests } = get();
         const now = new Date();
-        const getWeekKey = (d: Date) => {
-          const start = new Date(d);
-          start.setDate(d.getDate() - d.getDay());
-          return start.toISOString().slice(0, 10);
-        };
-        const thisWeekKey = getWeekKey(now);
+        const todayLocal = localDateKey(now);
         const updated = quests.map((q) => {
-          if (!q.is_completed || q.repeat_type === 'None') return q;
+          if (q.repeat_type !== 'Daily' || !q.is_completed) return q;
+          if (isQuestPeriodExpired(q, now)) return q;
           const completedAt = q.completed_at ? new Date(q.completed_at) : null;
           if (!completedAt) return q;
-          const completedWeekKey = getWeekKey(completedAt);
-          const shouldReset =
-            q.repeat_type === 'Daily'
-              ? completedAt.toISOString().slice(0, 10) !== now.toISOString().slice(0, 10)
-              : q.repeat_type === 'Weekly' && completedWeekKey !== thisWeekKey;
-          if (shouldReset)
-            return { ...q, is_completed: false, completed_at: undefined };
+          const shouldReset = localDateKey(completedAt) !== todayLocal;
+          if (shouldReset) return { ...q, is_completed: false, completed_at: undefined };
           return q;
         });
         set({ quests: updated });
@@ -483,7 +511,7 @@ export const useStore = create<QuestBoardState>()(
             playAchievement();
             get().addToast({
               type: 'success',
-              text: `🏆 업적 달성: ${newlyUnlocked.title}`,
+              text: `업적 달성: ${newlyUnlocked.title}`,
               duration: 3000,
             });
           }
@@ -519,7 +547,7 @@ export const useStore = create<QuestBoardState>()(
             : dailyChallenge.type === 'three' && todayQuestCount >= 3;
         if (!satisfied) return false;
         addPoints(20, '오늘의 도전 보너스');
-        addToast({ type: 'success', text: '🎯 오늘의 도전 달성! +20 G', duration: 2500 });
+        addToast({ type: 'success', text: '오늘의 도전 달성! +20 G', duration: 2500 });
         set({ dailyChallenge: { ...dailyChallenge, claimed: true } });
         return true;
       },
@@ -564,7 +592,7 @@ export const useStore = create<QuestBoardState>()(
         const { weeklyChallenge, addPoints, addToast } = get();
         if (weeklyChallenge.progress < 7 || weeklyChallenge.claimed) return false;
         addPoints(50, '주간 챌린지 보너스');
-        addToast({ type: 'success', text: '📅 주간 챌린지 달성! +50 G', duration: 2500 });
+        addToast({ type: 'success', text: '주간 챌린지 달성! +50 G', duration: 2500 });
         set({ weeklyChallenge: { ...weeklyChallenge, claimed: true } });
         return true;
       },
@@ -572,7 +600,7 @@ export const useStore = create<QuestBoardState>()(
         const { monthlyChallenge, addPoints, addToast } = get();
         if (monthlyChallenge.progress < 20 || monthlyChallenge.claimed) return false;
         addPoints(100, '월간 챌린지 보너스');
-        addToast({ type: 'success', text: '📆 월간 챌린지 달성! +100 G', duration: 2500 });
+        addToast({ type: 'success', text: '월간 챌린지 달성! +100 G', duration: 2500 });
         set({ monthlyChallenge: { ...monthlyChallenge, claimed: true } });
         return true;
       },
@@ -593,6 +621,17 @@ export const useStore = create<QuestBoardState>()(
         weeklyChallenge: s.weeklyChallenge,
         monthlyChallenge: s.monthlyChallenge,
       }),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<QuestBoardState> | undefined;
+        const c = current as QuestBoardState;
+        if (!p || typeof p !== 'object') return c;
+        const next = { ...c, ...p } as QuestBoardState;
+        const raw = Array.isArray(p.rewards) ? p.rewards : c.rewards;
+        next.rewards = raw.filter((r) => !LEGACY_MOCK_REWARD_IDS.has(r.id));
+        const rawQuests = Array.isArray(p.quests) ? p.quests : c.quests;
+        next.quests = rawQuests.map((q) => migrateQuestFromStorage(q as Quest));
+        return next;
+      },
     }
   )
 );

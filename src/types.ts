@@ -5,7 +5,11 @@
 
 // ============ Enums ============
 export type QuestDifficulty = 'Easy' | 'Normal' | 'Hard';
-export type RepeatType = 'Daily' | 'Weekly' | 'None';
+/** None: 1회성 | Daily: 설정한 기간(일) 동안 매일 1회 완료 가능 */
+export type RepeatType = 'None' | 'Daily';
+
+/** Daily 퀘스트 기간 프리셋 (일 수) */
+export type QuestGoalPeriodDays = 7 | 30 | 90 | 365;
 export type TransactionType = 'Earn' | 'Spend';
 
 /** 사용자 특성 (온보딩에서 1개 선택) - 매칭 퀘스트 완료 시 골드 +10% */
@@ -22,10 +26,6 @@ export interface User {
   title?: string;
   /** 선택한 특성 - 매칭 퀘스트 완료 시 골드 +10% */
   characterType?: CharacterType | null;
-  /** 보유 스킨 id 목록 */
-  ownedSkinIds?: string[];
-  /** 장착 중인 스킨 id */
-  equippedSkinId?: string | null;
   level: number;
   total_exp: number;
   current_points: number;
@@ -43,6 +43,10 @@ export interface Quest {
   is_completed: boolean;
   created_at: string; // ISO date
   repeat_type: RepeatType;
+  /** Daily: 시작일(생성일)부터 포함 일 수 (예: 30이면 30일 챌린지) */
+  goal_period_days?: number;
+  /** Daily: 완료한 날짜 키(로컬 YYYY-MM-DD), 하루 1회 */
+  completed_dates?: string[];
   completed_at?: string; // ISO date, 반복 퀘스트 갱신 판단용
   /** 카테고리 - 사용자 특성과 일치 시 골드 +10% */
   category?: QuestCategory;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,18 +11,44 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { CheckCircle2, Coins, Plus, Repeat, Sparkles, Trash2, X } from 'lucide-react-native';
+import {
+  CheckCircle2,
+  Coins,
+  Plus,
+  Repeat,
+  Sparkles,
+  Trash2,
+  Pencil,
+  X,
+  Gift,
+  Target,
+  Flame,
+} from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useStore } from '@/store/useStore';
 import { QuestCompleteOverlay } from '@/components/QuestCompleteOverlay';
 import { LevelUpEffect } from '@/components/LevelUpEffect';
-import { levelFromTotalExp } from '@/utils/levelExp';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/theme';
 import { getTodayLabel } from '@/utils/date';
 import { QUEST_CATEGORIES_WITH_TRAIT, getCategoryLabel } from '@/constants/character';
-import type { Quest, QuestDifficulty, RepeatType, QuestCategory } from '@/types';
+import { CharacterTraitIcon } from '@/components/CharacterTraitIcon';
+import type {
+  Quest,
+  QuestDifficulty,
+  RepeatType,
+  QuestCategory,
+  QuestGoalPeriodDays,
+} from '@/types';
+import {
+  questProgressRatio,
+  questProgressLabel,
+  questRepeatSummary,
+  isQuestPeriodExpired,
+} from '@/utils/questPeriod';
 
 const DIFFICULTY_MAP: Record<
   QuestDifficulty,
@@ -34,21 +60,36 @@ const DIFFICULTY_MAP: Record<
 };
 
 const REPEAT_OPTIONS: { value: RepeatType; label: string }[] = [
-  { value: 'Daily', label: '매일' },
-  { value: 'Weekly', label: '매주' },
-  { value: 'None', label: '1회' },
+  { value: 'Daily', label: '매일 인증' },
+  { value: 'None', label: '반복 안 함' },
 ];
 
-const REPEAT_LABEL = { Daily: '매일', Weekly: '매주', None: '1회' };
+const GOAL_PERIOD_OPTIONS: { days: QuestGoalPeriodDays; label: string }[] = [
+  { days: 7, label: '1주' },
+  { days: 30, label: '1개월' },
+  { days: 90, label: '3개월' },
+  { days: 365, label: '1년' },
+];
+
+function goalDaysToPreset(days: number | undefined): QuestGoalPeriodDays {
+  const presets: QuestGoalPeriodDays[] = [7, 30, 90, 365];
+  if (days != null && presets.includes(days as QuestGoalPeriodDays)) return days as QuestGoalPeriodDays;
+  return 30;
+}
+
+const MODAL_SHEET_HEIGHT_RATIO = 0.88;
 
 export default function QuestBoardScreen() {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const user = useStore((s) => s.user);
   const quests = useStore((s) => s.quests);
   const completeQuest = useStore((s) => s.completeQuest);
   const deleteQuest = useStore((s) => s.deleteQuest);
   const uncompleteQuest = useStore((s) => s.uncompleteQuest);
   const addQuest = useStore((s) => s.addQuest);
+  const updateQuest = useStore((s) => s.updateQuest);
+  const resetRepeatQuestsIfNeeded = useStore((s) => s.resetRepeatQuestsIfNeeded);
   const levelUpAmount = useStore((s) => s.levelUpAmount);
   const setLevelUpCleared = useStore((s) => s.setLevelUpCleared);
   const streakCount = useStore((s) => s.streakCount);
@@ -59,15 +100,28 @@ export default function QuestBoardScreen() {
   const [lastEarnedGold, setLastEarnedGold] = useState(0);
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [editingQuestId, setEditingQuestId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newPoints, setNewPoints] = useState('15');
   const [newDifficulty, setNewDifficulty] = useState<QuestDifficulty>('Normal');
   const [newRepeat, setNewRepeat] = useState<RepeatType>('Daily');
+  const [newGoalDays, setNewGoalDays] = useState<QuestGoalPeriodDays>(30);
   const [newCategory, setNewCategory] = useState<QuestCategory>('none');
+
+  useFocusEffect(
+    useCallback(() => {
+      resetRepeatQuestsIfNeeded();
+    }, [resetRepeatQuestsIfNeeded]),
+  );
+
+  useEffect(() => {
+    if (addModalVisible) resetRepeatQuestsIfNeeded();
+  }, [addModalVisible, resetRepeatQuestsIfNeeded]);
 
   const handleComplete = async (quest: Quest) => {
     if (quest.is_completed || completingId) return;
+    if (isQuestPeriodExpired(quest)) return;
     setCompletingId(quest.id);
     try {
       const gold = completeQuest(quest.id);
@@ -81,25 +135,65 @@ export default function QuestBoardScreen() {
     }
   };
 
-  const handleAddQuest = () => {
-    const title = newTitle.trim();
-    if (!title) return;
-    const points = Math.max(0, parseInt(newPoints, 10) || 15);
-    addQuest({
-      title,
-      description: newDesc.trim(),
-      points_reward: points,
-      difficulty: newDifficulty,
-      repeat_type: newRepeat,
-      category: newCategory,
-    });
+  const resetQuestForm = () => {
     setNewTitle('');
     setNewDesc('');
     setNewPoints('15');
     setNewDifficulty('Normal');
     setNewRepeat('Daily');
+    setNewGoalDays(30);
     setNewCategory('none');
+    setEditingQuestId(null);
+  };
+
+  const closeQuestModal = () => {
     setAddModalVisible(false);
+    resetQuestForm();
+  };
+
+  const openAddQuestModal = () => {
+    resetQuestForm();
+    setAddModalVisible(true);
+  };
+
+  const openEditQuestModal = (q: Quest) => {
+    setEditingQuestId(q.id);
+    setNewTitle(q.title);
+    setNewDesc(q.description);
+    setNewPoints(String(q.points_reward));
+    setNewDifficulty(q.difficulty);
+    setNewRepeat(q.repeat_type);
+    setNewGoalDays(goalDaysToPreset(q.goal_period_days));
+    setNewCategory(q.category ?? 'none');
+    setAddModalVisible(true);
+  };
+
+  const handleSaveQuest = () => {
+    const title = newTitle.trim();
+    if (!title) return;
+    const points = Math.max(0, parseInt(newPoints, 10) || 15);
+    if (editingQuestId) {
+      updateQuest(editingQuestId, {
+        title,
+        description: newDesc.trim(),
+        points_reward: points,
+        difficulty: newDifficulty,
+        repeat_type: newRepeat,
+        goal_period_days: newRepeat === 'Daily' ? newGoalDays : undefined,
+        category: newCategory,
+      });
+    } else {
+      addQuest({
+        title,
+        description: newDesc.trim(),
+        points_reward: points,
+        difficulty: newDifficulty,
+        repeat_type: newRepeat,
+        goal_period_days: newRepeat === 'Daily' ? newGoalDays : undefined,
+        category: newCategory,
+      });
+    }
+    closeQuestModal();
   };
 
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -120,12 +214,18 @@ export default function QuestBoardScreen() {
           onPress={() => claimDailyBonus()}
           activeOpacity={0.9}
         >
-          <Text style={styles.dailyBannerText}>🎁 오늘 출석 보너스 +50 G 받기</Text>
+          <View style={styles.dailyBannerInner}>
+            <Gift size={18} color={COLORS.goldDark} strokeWidth={2} />
+            <Text style={styles.dailyBannerText}>오늘 출석 보너스 +50 G 받기</Text>
+          </View>
         </TouchableOpacity>
       )}
       {dailyChallengeLabel && (
         <View style={styles.dailyChallengeBanner}>
-          <Text style={styles.dailyChallengeLabel}>🎯 오늘의 도전</Text>
+          <View style={styles.dailyChallengeTitleRow}>
+            <Target size={16} color={COLORS.goldDark} strokeWidth={2} />
+            <Text style={styles.dailyChallengeLabel}>오늘의 도전</Text>
+          </View>
           <Text style={styles.dailyChallengeDesc}>{dailyChallengeLabel} → +20 G</Text>
         </View>
       )}
@@ -136,7 +236,7 @@ export default function QuestBoardScreen() {
           <View style={styles.headerRight}>
             <TouchableOpacity
               style={styles.addBtn}
-              onPress={() => setAddModalVisible(true)}
+              onPress={openAddQuestModal}
               activeOpacity={0.85}
             >
               <Plus size={20} color={COLORS.surface} strokeWidth={2.5} />
@@ -149,9 +249,15 @@ export default function QuestBoardScreen() {
           </View>
         </View>
         <View style={styles.headerSubRow}>
-          <Text style={styles.headerSub}>완료하면 골드를 받아요 ✨</Text>
+          <View style={styles.headerSubLeft}>
+            <Sparkles size={14} color={COLORS.textMuted} strokeWidth={2} />
+            <Text style={styles.headerSub}>완료하면 골드를 받아요</Text>
+          </View>
           {streakCount > 0 && (
-            <Text style={styles.streakBadge}>🔥 {streakCount}일 연속</Text>
+            <View style={styles.streakBadge}>
+              <Flame size={14} color={COLORS.goldDark} strokeWidth={2} />
+              <Text style={styles.streakBadgeText}>{streakCount}일 연속</Text>
+            </View>
           )}
         </View>
       </View>
@@ -168,7 +274,7 @@ export default function QuestBoardScreen() {
             <Text style={styles.emptyText}>새 퀘스트를 추가해 보세요!</Text>
             <TouchableOpacity
               style={styles.emptyAddBtn}
-              onPress={() => setAddModalVisible(true)}
+              onPress={openAddQuestModal}
               activeOpacity={0.85}
             >
               <Plus size={18} color={COLORS.surface} strokeWidth={2.5} />
@@ -182,6 +288,7 @@ export default function QuestBoardScreen() {
               style={[
                 styles.card,
                 q.is_completed && styles.cardCompleted,
+                isQuestPeriodExpired(q) && styles.cardExpired,
                 SHADOWS.card,
               ]}
             >
@@ -212,7 +319,7 @@ export default function QuestBoardScreen() {
                   </View>
                   <View style={styles.repeatBadge}>
                     <Repeat size={10} color={COLORS.textMuted} strokeWidth={2} />
-                    <Text style={styles.repeatText}>{REPEAT_LABEL[q.repeat_type]}</Text>
+                    <Text style={styles.repeatText}>{questRepeatSummary(q)}</Text>
                   </View>
                 </View>
               </View>
@@ -221,6 +328,22 @@ export default function QuestBoardScreen() {
                   {q.description}
                 </Text>
               ) : null}
+              <View style={styles.progressBlock}>
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${Math.round(questProgressRatio(q) * 100)}%` },
+                    ]}
+                  />
+                </View>
+                <View style={styles.progressMeta}>
+                  <Text style={styles.progressLabel}>{questProgressLabel(q)}</Text>
+                  {isQuestPeriodExpired(q) ? (
+                    <Text style={styles.progressExpired}>기간 종료</Text>
+                  ) : null}
+                </View>
+              </View>
               <View style={styles.footer}>
                 <View style={styles.pointsChip}>
                   <Coins size={14} color={COLORS.gold} strokeWidth={2.5} />
@@ -229,9 +352,12 @@ export default function QuestBoardScreen() {
                 {!q.is_completed ? (
                   <View style={styles.incompleteRow}>
                     <TouchableOpacity
-                      style={styles.completeBtn}
+                      style={[
+                        styles.completeBtn,
+                        isQuestPeriodExpired(q) && styles.completeBtnDisabled,
+                      ]}
                       onPress={() => handleComplete(q)}
-                      disabled={!!completingId}
+                      disabled={!!completingId || isQuestPeriodExpired(q)}
                       activeOpacity={0.85}
                     >
                       {completingId === q.id ? (
@@ -242,6 +368,14 @@ export default function QuestBoardScreen() {
                           <Text style={styles.completeBtnText}>완료하기</Text>
                         </>
                       )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteBtn}
+                      onPress={() => openEditQuestModal(q)}
+                      hitSlop={8}
+                      activeOpacity={0.7}
+                    >
+                      <Pencil size={18} color={COLORS.textMuted} strokeWidth={2} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.deleteBtn}
@@ -264,6 +398,14 @@ export default function QuestBoardScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.deleteBtn}
+                      onPress={() => openEditQuestModal(q)}
+                      hitSlop={8}
+                      activeOpacity={0.7}
+                    >
+                      <Pencil size={18} color={COLORS.textMuted} strokeWidth={2} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteBtn}
                       onPress={() => deleteQuest(q.id)}
                       hitSlop={8}
                       activeOpacity={0.7}
@@ -282,31 +424,35 @@ export default function QuestBoardScreen() {
         visible={addModalVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setAddModalVisible(false)}
+        onRequestClose={closeQuestModal}
       >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setAddModalVisible(false)}
-        >
+        <Pressable style={styles.modalBackdrop} onPress={closeQuestModal}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.modalWrap}
+            style={[styles.modalWrap, { height: windowHeight * MODAL_SHEET_HEIGHT_RATIO }]}
           >
             <Pressable
               style={[styles.modalCard, { paddingBottom: Math.max(8, insets.bottom) }]}
               onPress={(e) => e.stopPropagation()}
             >
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>퀘스트 추가</Text>
+                <Text style={styles.modalTitle}>
+                  {editingQuestId ? '퀘스트 수정' : '퀘스트 추가'}
+                </Text>
                 <TouchableOpacity
-                  onPress={() => setAddModalVisible(false)}
+                  onPress={closeQuestModal}
                   hitSlop={12}
                   style={styles.modalClose}
                 >
                   <X size={24} color={COLORS.textMuted} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
-              <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                style={styles.modalScroll}
+                contentContainerStyle={styles.modalBody}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
                 <Text style={styles.modalLabel}>제목 *</Text>
                 <TextInput
                   style={styles.modalInput}
@@ -360,6 +506,10 @@ export default function QuestBoardScreen() {
                   ))}
                 </View>
                 <Text style={styles.modalLabel}>반복</Text>
+                <Text style={styles.modalHint}>
+                  매일 인증은 선택한 기간 동안 하루에 한 번 완료할 수 있어요. 날이 바뀌면 다시 완료할 수 있습니다. 반복
+                  안 함은 한 번 끝나면 그대로예요.
+                </Text>
                 <View style={styles.modalRow}>
                   {REPEAT_OPTIONS.map(({ value, label }) => (
                     <TouchableOpacity
@@ -381,10 +531,36 @@ export default function QuestBoardScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                {newRepeat === 'Daily' ? (
+                  <>
+                    <Text style={styles.modalLabel}>진행 기간</Text>
+                    <View style={styles.modalRow}>
+                      {GOAL_PERIOD_OPTIONS.map(({ days, label }) => (
+                        <TouchableOpacity
+                          key={days}
+                          style={[
+                            styles.modalChip,
+                            newGoalDays === days && { backgroundColor: COLORS.goldLight + '99' },
+                          ]}
+                          onPress={() => setNewGoalDays(days)}
+                        >
+                          <Text
+                            style={[
+                              styles.modalChipText,
+                              newGoalDays === days && { color: COLORS.goldDark, fontWeight: '600' },
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
                 <Text style={styles.modalLabel}>카테고리</Text>
                 <Text style={styles.modalHint}>프로필 특성(운동인/지식인/창작인/정비인)과 같으면 완료 시 골드 +10%</Text>
                 <View style={styles.modalRow}>
-                  {QUEST_CATEGORIES_WITH_TRAIT.map(({ value, label, emoji }) => (
+                  {QUEST_CATEGORIES_WITH_TRAIT.map(({ value, label }) => (
                     <TouchableOpacity
                       key={value}
                       style={[
@@ -393,7 +569,15 @@ export default function QuestBoardScreen() {
                       ]}
                       onPress={() => setNewCategory(value)}
                     >
-                      {emoji ? <Text style={styles.modalChipEmoji}>{emoji}</Text> : null}
+                      {value !== 'none' ? (
+                        <CharacterTraitIcon
+                          type={value}
+                          size={16}
+                          color={
+                            newCategory === value ? COLORS.goldDark : COLORS.textMuted
+                          }
+                        />
+                      ) : null}
                       <Text
                         style={[
                           styles.modalChipText,
@@ -408,11 +592,13 @@ export default function QuestBoardScreen() {
               </ScrollView>
               <TouchableOpacity
                 style={[styles.modalSubmit, !newTitle.trim() && styles.modalSubmitDisabled]}
-                onPress={handleAddQuest}
+                onPress={handleSaveQuest}
                 disabled={!newTitle.trim()}
                 activeOpacity={0.85}
               >
-                <Text style={styles.modalSubmitText}>추가하기</Text>
+                <Text style={styles.modalSubmitText}>
+                  {editingQuestId ? '저장하기' : '추가하기'}
+                </Text>
               </TouchableOpacity>
             </Pressable>
           </KeyboardAvoidingView>
@@ -422,7 +608,6 @@ export default function QuestBoardScreen() {
       <QuestCompleteOverlay
         visible={celebrationVisible}
         earnedGold={lastEarnedGold}
-        level={user ? levelFromTotalExp(user.total_exp) : 1}
         onFinish={() => setCelebrationVisible(false)}
       />
       <LevelUpEffect
@@ -463,17 +648,30 @@ const styles = StyleSheet.create({
   },
   headerSubRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     gap: SPACING.sm,
+    flexWrap: 'wrap',
+  },
+  headerSubLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
   },
   streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.goldLight + 'cc',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  streakBadgeText: {
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.goldDark,
-    backgroundColor: COLORS.goldLight + 'cc',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: RADIUS.full,
   },
   dailyBanner: {
     backgroundColor: COLORS.goldLight,
@@ -482,6 +680,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gold + '44',
+  },
+  dailyBannerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   dailyBannerText: {
     fontSize: 14,
@@ -494,6 +697,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
+  },
+  dailyChallengeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   dailyChallengeLabel: {
     fontSize: 12,
@@ -599,6 +807,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.successLight,
     opacity: 0.95,
   },
+  cardExpired: {
+    opacity: 0.88,
+  },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -656,6 +867,36 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     lineHeight: 21,
   },
+  progressBlock: {
+    marginBottom: SPACING.md,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.bgSecondary,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.gold,
+    borderRadius: 3,
+  },
+  progressMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  progressLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  progressExpired: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -681,6 +922,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     minWidth: 100,
     justifyContent: 'center',
+  },
+  completeBtnDisabled: {
+    opacity: 0.42,
   },
   completeBtnText: {
     fontSize: 14,
@@ -722,14 +966,15 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalWrap: {
-    maxHeight: '100%',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   modalCard: {
+    flex: 1,
+    width: '100%',
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
-    paddingBottom: 0,
-    maxHeight: '100%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -739,7 +984,10 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.lg,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    maxHeight: '100%',
+  },
+  modalScroll: {
+    flex: 1,
+    minHeight: 0,
   },
   modalTitle: {
     fontSize: 18,
@@ -751,7 +999,7 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     padding: SPACING.xl,
-    maxHeight: 360,
+    paddingBottom: SPACING.lg,
   },
   modalLabel: {
     fontSize: 13,
@@ -790,9 +1038,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     borderRadius: RADIUS.full,
     backgroundColor: COLORS.bgSecondary,
-  },
-  modalChipEmoji: {
-    fontSize: 14,
   },
   modalChipText: {
     fontSize: 14,

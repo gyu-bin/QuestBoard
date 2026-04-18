@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
+import { Sparkles } from 'lucide-react-native';
 import { COLORS, RADIUS } from '@/theme';
 
 export type CharacterMood = 'idle' | 'happy' | 'levelup';
@@ -12,7 +13,6 @@ interface CharacterViewProps {
   level: number;
   mood?: CharacterMood;
   size?: 'small' | 'medium' | 'large';
-  skinEmoji?: string | null;
 }
 
 function getStage(level: number): { accent: 'default' | 'sprout' | 'hero' } {
@@ -32,7 +32,6 @@ export function CharacterView({
   level,
   mood = 'idle',
   size = 'medium',
-  skinEmoji,
 }: CharacterViewProps) {
   const scale = useRef(new Animated.Value(1)).current;
   const bounce = useRef(new Animated.Value(0)).current;
@@ -80,11 +79,6 @@ export function CharacterView({
       ]}
     >
       <View style={[styles.circle, { width: sizeNum, height: sizeNum }]}>
-        {skinEmoji ? (
-          <View style={styles.skinOverlay}>
-            <Text style={[styles.skinEmoji, { fontSize: sizeNum * 0.28 }]}>{skinEmoji}</Text>
-          </View>
-        ) : null}
         <View style={[styles.figure, { width: sizeNum, height: sizeNum }]}>
           {/* 맨발 */}
           <View style={[styles.foot, { width: footW, height: footH, borderRadius: 3, left: sizeNum * 0.3 - footW / 2, top: headR * 2 + shirtH + shortsH }]} />
@@ -155,14 +149,14 @@ export function CharacterView({
           />
           {accent === 'hero' && (
             <View style={[styles.heroCrown, { top: -sizeNum * 0.08 }]}>
-              <Text style={{ fontSize: sizeNum * 0.2 }}>✨</Text>
+              <Sparkles size={Math.max(14, sizeNum * 0.2)} color={COLORS.gold} strokeWidth={2} />
             </View>
           )}
         </View>
       </View>
       {mood === 'levelup' && (
         <View style={styles.glow}>
-          <Text style={styles.glowText}>✨</Text>
+          <Sparkles size={16} color={COLORS.goldLight} strokeWidth={2} />
         </View>
       )}
     </Animated.View>
@@ -179,8 +173,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.gold,
   },
-  skinOverlay: { position: 'absolute', top: 2, right: 2 },
-  skinEmoji: {},
   figure: { position: 'relative', alignItems: 'center' },
   hair: { position: 'absolute' },
   head: { position: 'absolute' },
@@ -190,5 +182,4 @@ const styles = StyleSheet.create({
   foot: { position: 'absolute', backgroundColor: FOOT_SKIN, borderWidth: 1.5, borderColor: OUTLINE },
   heroCrown: { position: 'absolute' },
   glow: { position: 'absolute', bottom: -4, alignSelf: 'center' },
-  glowText: { fontSize: 14 },
 });

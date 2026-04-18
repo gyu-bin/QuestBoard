@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { PartyPopper } from 'lucide-react-native';
 import { COLORS, SPACING, RADIUS } from '@/theme';
 
 interface LevelUpEffectProps {
@@ -51,7 +52,9 @@ export function LevelUpEffect({ level, visible, onDismiss }: LevelUpEffectProps)
             },
           ]}
         >
-          <Text style={styles.emoji}>🎉</Text>
+          <View style={styles.iconWrap}>
+            <PartyPopper size={48} color={COLORS.gold} strokeWidth={2} />
+          </View>
           <Text style={styles.title}>레벨 업!</Text>
           <Text style={styles.level}>Lv.{level}</Text>
           <Text style={styles.hint}>탭하여 닫기</Text>
@@ -76,8 +79,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 200,
   },
-  emoji: {
-    fontSize: 56,
+  iconWrap: {
     marginBottom: SPACING.sm,
   },
   title: {

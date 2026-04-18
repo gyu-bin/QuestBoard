@@ -3,7 +3,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useStore } from '@/store/useStore';
-import { mockRewards } from '@/data/mockRewards';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { COLORS } from '@/theme';
 
@@ -11,7 +10,6 @@ export default function RootLayout() {
   const [hasHydrated, setHasHydrated] = useState(false);
   const user = useStore((s) => s.user);
   const setQuests = useStore((s) => s.setQuests);
-  const setRewards = useStore((s) => s.setRewards);
   const resetRepeatQuestsIfNeeded = useStore((s) => s.resetRepeatQuestsIfNeeded);
 
   /** 예전 더미 퀘스트 id 제거 (한 번만 실행되면 됨) */
@@ -20,10 +18,9 @@ export default function RootLayout() {
   useEffect(() => {
     const finish = () => {
       setHasHydrated(true);
-      const { quests, rewards, checkAchievements, ensureDailyChallenge, ensurePeriodChallenges } = useStore.getState();
+      const { quests, checkAchievements, ensureDailyChallenge, ensurePeriodChallenges } = useStore.getState();
       const withoutMock = quests.filter((q) => !MOCK_QUEST_IDS.includes(q.id));
       if (withoutMock.length !== quests.length) setQuests(withoutMock);
-      if (rewards.length === 0) setRewards(mockRewards);
       checkAchievements();
       ensureDailyChallenge();
       ensurePeriodChallenges();
@@ -35,7 +32,7 @@ export default function RootLayout() {
       unsub();
       clearTimeout(timeout);
     };
-  }, [setQuests, setRewards]);
+  }, [setQuests]);
 
   useEffect(() => {
     const t = setInterval(() => resetRepeatQuestsIfNeeded(), 60_000);

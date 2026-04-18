@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, Animated } from 'react-native';
+import { Sparkles } from 'lucide-react-native';
+import { COLORS } from '@/theme';
 
 interface CelebrationLottieProps {
   visible: boolean;
@@ -53,7 +55,9 @@ export function CelebrationLottie({ visible, onFinish }: CelebrationLottieProps)
             },
           ]}
         >
-          <Text style={styles.emoji}>✨</Text>
+          <View style={styles.sparkleWrap}>
+            <Sparkles size={36} color={COLORS.surface} strokeWidth={2} />
+          </View>
           <Text style={styles.text}>골드 획득!</Text>
         </Animated.View>
       </View>
@@ -75,8 +79,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
   },
-  emoji: {
-    fontSize: 48,
+  sparkleWrap: {
     marginBottom: 8,
   },
   text: {

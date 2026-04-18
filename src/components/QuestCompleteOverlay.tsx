@@ -1,5 +1,5 @@
 /**
- * 퀘스트 완료 시 캐릭터 + 골드 카운트업 연출
+ * 퀘스트 완료 시 골드 카운트업 연출
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -9,33 +9,29 @@ import {
   TouchableOpacity,
   Animated,
 } from 'react-native';
-import { CharacterView } from '@/components/CharacterView';
+import { CheckCircle2 } from 'lucide-react-native';
 import { COLORS, SPACING, RADIUS } from '@/theme';
 
 interface QuestCompleteOverlayProps {
   visible: boolean;
   earnedGold: number;
-  level: number;
   onFinish: () => void;
 }
 
 export function QuestCompleteOverlay({
   visible,
   earnedGold,
-  level,
   onFinish,
 }: QuestCompleteOverlayProps) {
   const scale = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const [displayGold, setDisplayGold] = useState(0);
-  const goldAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!visible) return;
     scale.setValue(0);
     opacity.setValue(0);
     setDisplayGold(0);
-    goldAnim.setValue(0);
     Animated.parallel([
       Animated.spring(scale, {
         toValue: 1,
@@ -68,7 +64,7 @@ export function QuestCompleteOverlay({
       clearInterval(interval);
       clearTimeout(t);
     };
-  }, [visible, earnedGold, onFinish, scale, opacity, goldAnim]);
+  }, [visible, earnedGold, onFinish, scale, opacity]);
 
   if (!visible) return null;
 
@@ -88,7 +84,7 @@ export function QuestCompleteOverlay({
             },
           ]}
         >
-          <CharacterView level={level} mood="happy" size="large" />
+          <CheckCircle2 size={48} color={COLORS.success} strokeWidth={2.5} />
           <Text style={styles.title}>골드 획득!</Text>
           <Text style={styles.gold}>+{displayGold} G</Text>
           <Text style={styles.hint}>탭하여 닫기</Text>

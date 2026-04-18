@@ -37,7 +37,7 @@ export default function ShopScreen() {
     if (purchasingId || reward.stock_count <= 0) return;
     if (user && user.current_points < reward.cost_points) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      addToast({ type: 'error', text: '골드가 부족해요 💧' });
+      addToast({ type: 'error', text: '골드가 부족해요' });
       return;
     }
     setPurchasingId(reward.id);
@@ -45,10 +45,10 @@ export default function ShopScreen() {
       const ok = purchaseReward(reward.id);
       if (ok) {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        addToast({ type: 'success', text: `${reward.title} 구매 완료! 🎉` });
+        addToast({ type: 'success', text: `${reward.title} 구매 완료` });
       } else {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        addToast({ type: 'error', text: '골드가 부족해요 💧' });
+        addToast({ type: 'error', text: '골드가 부족해요' });
       }
     } finally {
       setPurchasingId(null);
@@ -73,7 +73,10 @@ export default function ShopScreen() {
         <View>
           <Text style={styles.headerDate}>{getTodayLabel()}</Text>
           <Text style={styles.headerTitle}>보상 상점</Text>
-          <Text style={styles.headerSub}>골드로 나만의 보상을 사요 🛒</Text>
+          <View style={styles.headerSubRow}>
+            <ShoppingBag size={14} color={COLORS.textMuted} strokeWidth={2} />
+            <Text style={styles.headerSub}>골드로 나만의 보상을 사요</Text>
+          </View>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
@@ -318,10 +321,15 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: -0.3,
   },
+  headerSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
   headerSub: {
     fontSize: 12,
     color: COLORS.textMuted,
-    marginTop: 2,
   },
   addBtn: {
     flexDirection: 'row',

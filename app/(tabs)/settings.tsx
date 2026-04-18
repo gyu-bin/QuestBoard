@@ -1,9 +1,22 @@
 import { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Alert, Modal, Pressable, TextInput, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Coins, Award, RotateCcw, RotateCw, Target, TrendingUp, X, Trophy, Calendar, Pencil } from 'lucide-react-native';
+import {
+  Coins,
+  Award,
+  RotateCcw,
+  RotateCw,
+  Target,
+  TrendingUp,
+  X,
+  Trophy,
+  Calendar,
+  Pencil,
+  Lock,
+  Sprout,
+  Flame,
+} from 'lucide-react-native';
 import { useStore } from '@/store/useStore';
-import { CharacterView } from '@/components/CharacterView';
 import { CalendarWithSwipe } from '@/components/CalendarWithSwipe';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '@/theme';
 import {
@@ -13,7 +26,7 @@ import {
 } from '@/utils/levelExp';
 import { getAchievementProgress, mergeAchievementsForDisplay } from '@/utils/achievements';
 import { CHARACTER_TYPES, getCharacterLabel } from '@/constants/character';
-import { SKINS, getSkinById } from '@/constants/skins';
+import { CharacterTraitIcon } from '@/components/CharacterTraitIcon';
 import type { CharacterType } from '@/types';
 
 type RecordModalType = 'quest' | 'earn' | 'spend' | null;
@@ -44,8 +57,6 @@ export default function SettingsScreen() {
   const ensurePeriodChallenges = useStore((s) => s.ensurePeriodChallenges);
   const tryClaimWeeklyChallenge = useStore((s) => s.tryClaimWeeklyChallenge);
   const tryClaimMonthlyChallenge = useStore((s) => s.tryClaimMonthlyChallenge);
-  const purchaseSkin = useStore((s) => s.purchaseSkin);
-  const equipSkin = useStore((s) => s.equipSkin);
   const [recordModal, setRecordModal] = useState<RecordModalType>(null);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [showAllAchievements, setShowAllAchievements] = useState(false);
@@ -131,7 +142,10 @@ export default function SettingsScreen() {
       <View style={[styles.header]}>
         <View>
           <Text style={styles.headerTitle}>프로필</Text>
-          <Text style={styles.headerSub}>나의 성장 기록이에요 🌱</Text>
+          <View style={styles.headerSubRow}>
+            <Sprout size={16} color={COLORS.gold} strokeWidth={2} />
+            <Text style={styles.headerSub}>나의 성장 기록이에요</Text>
+          </View>
         </View>
         <TouchableOpacity
           style={styles.resetProgressBtn}
@@ -158,12 +172,6 @@ export default function SettingsScreen() {
           }}
           activeOpacity={0.9}
         >
-          {/* <CharacterView
-            level={user.level}
-            mood="idle"
-            size="medium"
-            skinEmoji={getSkinById(user.equippedSkinId)?.emoji}
-          /> */}
           <View style={styles.profileInfo}>
             <View style={styles.profileNameRow}>
               <View style={styles.profileNameTitleWrap}>
@@ -177,13 +185,16 @@ export default function SettingsScreen() {
               <Pencil size={14} color={COLORS.textMuted} strokeWidth={2} />         
             </View>
             {streakCount > 0 ? (
-              <Text style={styles.streakText}>🔥 {streakCount}일 연속 퀘스트 완료</Text>
+              <View style={styles.streakRow}>
+                <Flame size={16} color={COLORS.goldDark} strokeWidth={2} />
+                <Text style={styles.streakText}>{streakCount}일 연속 퀘스트 완료</Text>
+              </View>
             ) : null}
             {user.characterType ? (
               <View style={styles.roleHighlight}>
-                <Text style={styles.roleEmoji}>
-                  {CHARACTER_TYPES.find((c) => c.value === user.characterType)?.emoji}
-                </Text>
+                <View style={styles.roleIconWrap}>
+                  <CharacterTraitIcon type={user.characterType} size={28} color={COLORS.goldDark} />
+                </View>
                 <View style={styles.roleTextWrap}>
                   <Text style={styles.roleLabel}>나의 역할</Text>
                   <Text style={styles.roleName}>{getCharacterLabel(user.characterType)}</Text>
@@ -243,7 +254,13 @@ export default function SettingsScreen() {
                       style={[styles.traitChip, editCharacterType === t.value && styles.traitChipActive]}
                       onPress={() => setEditCharacterType(t.value)}
                     >
-                      <Text style={styles.traitChipEmoji}>{t.emoji}</Text>
+                      <View style={styles.traitChipIcon}>
+                        <CharacterTraitIcon
+                          type={t.value}
+                          size={20}
+                          color={editCharacterType === t.value ? COLORS.goldDark : COLORS.textSecondary}
+                        />
+                      </View>
                       <Text style={[styles.traitChipText, editCharacterType === t.value && styles.traitChipTextActive]}>{t.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -284,7 +301,13 @@ export default function SettingsScreen() {
                 const progress = !a.unlockedAt ? getAchievementProgress(a.id, achievementState) : null;
                 return (
                   <View key={a.id} style={[styles.achievementRow, !a.unlockedAt && styles.achievementRowLocked]}>
-                    <Text style={styles.achievementEmoji}>{a.unlockedAt ? '🏆' : '🔒'}</Text>
+                    <View style={styles.achievementIconWrap}>
+                      {a.unlockedAt ? (
+                        <Trophy size={22} color={COLORS.gold} strokeWidth={2} />
+                      ) : (
+                        <Lock size={22} color={COLORS.textMuted} strokeWidth={2} />
+                      )}
+                    </View>
                     <View style={styles.achievementTextWrap}>
                       <Text style={[styles.achievementTitle, !a.unlockedAt && styles.achievementTitleLocked]}>{a.title}</Text>
                       {a.unlockedAt && a.description ? (
@@ -365,7 +388,10 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>기간 챌린지</Text>
           <View style={styles.challengeRow}>
             <View style={styles.challengeItem}>
-              <Text style={styles.challengeLabel}>📅 이번 주 (7개 완료)</Text>
+              <View style={styles.challengeLabelRow}>
+                <Calendar size={16} color={COLORS.textSecondary} strokeWidth={2} />
+                <Text style={styles.challengeLabel}>이번 주 (7개 완료)</Text>
+              </View>
               <Text style={styles.challengeProgress}>{weeklyChallenge.progress} / 7</Text>
               {weeklyChallenge.progress >= 7 && !weeklyChallenge.claimed ? (
                 <TouchableOpacity style={styles.challengeClaimBtn} onPress={() => { ensurePeriodChallenges(); tryClaimWeeklyChallenge(); }} activeOpacity={0.85}>
@@ -376,7 +402,10 @@ export default function SettingsScreen() {
               ) : null}
             </View>
             <View style={styles.challengeItem}>
-              <Text style={styles.challengeLabel}>📆 이번 달 (20개 완료)</Text>
+              <View style={styles.challengeLabelRow}>
+                <Calendar size={16} color={COLORS.textSecondary} strokeWidth={2} />
+                <Text style={styles.challengeLabel}>이번 달 (20개 완료)</Text>
+              </View>
               <Text style={styles.challengeProgress}>{monthlyChallenge.progress} / 20</Text>
               {monthlyChallenge.progress >= 20 && !monthlyChallenge.claimed ? (
                 <TouchableOpacity style={styles.challengeClaimBtn} onPress={() => { ensurePeriodChallenges(); tryClaimMonthlyChallenge(); }} activeOpacity={0.85}>
@@ -413,46 +442,6 @@ export default function SettingsScreen() {
               <Text style={styles.statValue}>{spendCount}</Text>
               <Text style={styles.statLabel}>사용 기록</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={[styles.skinsCard, SHADOWS.card]}>
-          <Text style={styles.sectionTitle}>캐릭터 꾸미기</Text>
-          <Text style={styles.skinsHint}>골드로 악세사리를 구매하고 장착해 보세요</Text>
-          <View style={styles.skinsList}>
-            {SKINS.map((skin) => {
-              const owned = (user.ownedSkinIds ?? []).includes(skin.id);
-              const equipped = user.equippedSkinId === skin.id;
-              return (
-                <View key={skin.id} style={styles.skinRow}>
-                  <Text style={styles.skinEmoji}>{skin.emoji}</Text>
-                  <View style={styles.skinInfo}>
-                    <Text style={styles.skinName}>{skin.name}</Text>
-                    <Text style={styles.skinCost}>{skin.cost} G</Text>
-                  </View>
-                  {owned ? (
-                    <TouchableOpacity
-                      style={[styles.skinBtn, equipped && styles.skinBtnEquipped]}
-                      onPress={() => equipSkin(equipped ? null : skin.id)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.skinBtnText, equipped && styles.skinBtnTextEquipped]}>
-                        {equipped ? '장착 중' : '장착'}
-                      </Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.skinBtn, (user.current_points < skin.cost && styles.skinBtnDisabled)]}
-                      onPress={() => purchaseSkin(skin.id)}
-                      disabled={user.current_points < skin.cost}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.skinBtnText}>구매</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
           </View>
         </View>
 
@@ -540,10 +529,15 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: -0.3,
   },
+  headerSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
   headerSub: {
     fontSize: 13,
     color: COLORS.textMuted,
-    marginTop: 2,
   },
   resetProgressBtn: {
     flexDirection: 'row',
@@ -717,9 +711,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.goldLight + '80',
   },
-  roleEmoji: {
-    fontSize: 32,
+  roleIconWrap: {
     marginRight: SPACING.md,
+    justifyContent: 'center',
   },
   roleTextWrap: {
     flex: 1,
@@ -743,10 +737,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '500',
   },
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: SPACING.sm,
+  },
   streakText: {
     fontSize: 12,
     color: COLORS.goldDark,
-    marginTop: SPACING.sm,
     fontWeight: '600',
   },
   traitChipsRow: {
@@ -767,8 +766,9 @@ const styles = StyleSheet.create({
   traitChipActive: {
     backgroundColor: COLORS.goldLight + 'cc',
   },
-  traitChipEmoji: {
-    fontSize: 14,
+  traitChipIcon: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   traitChipText: {
     fontSize: 13,
@@ -811,9 +811,11 @@ const styles = StyleSheet.create({
   achievementRowLocked: {
     opacity: 0.7,
   },
-  achievementEmoji: {
-    fontSize: 20,
+  achievementIconWrap: {
+    width: 28,
     marginRight: SPACING.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   achievementTextWrap: {
     flex: 1,
@@ -939,11 +941,17 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     padding: SPACING.md,
   },
+  challengeLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
   challengeLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.textSecondary,
-    marginBottom: 4,
+    flex: 1,
   },
   challengeProgress: {
     fontSize: 17,
@@ -968,65 +976,6 @@ const styles = StyleSheet.create({
     color: COLORS.success,
     fontWeight: '600',
     marginTop: SPACING.xs,
-  },
-  skinsCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  skinsHint: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginTop: -SPACING.sm,
-    marginBottom: SPACING.md,
-  },
-  skinsList: {
-    gap: SPACING.sm,
-  },
-  skinRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.bgSecondary,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-  },
-  skinEmoji: {
-    fontSize: 24,
-    marginRight: SPACING.md,
-  },
-  skinInfo: { flex: 1 },
-  skinName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  skinCost: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  skinBtn: {
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.gold,
-  },
-  skinBtnEquipped: {
-    backgroundColor: COLORS.success,
-  },
-  skinBtnDisabled: {
-    opacity: 0.5,
-  },
-  skinBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.surface,
-  },
-  skinBtnTextEquipped: {
-    color: COLORS.surface,
   },
   statsCard: {
     backgroundColor: COLORS.card,

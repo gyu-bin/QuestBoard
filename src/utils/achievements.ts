@@ -74,7 +74,8 @@ export function mergeAchievementsForDisplay(
 ): Achievement[] {
   const merged = ACHIEVEMENT_DEFINITIONS.map((def) => {
     const found = existing?.find((a) => a.id === def.id);
-    return { ...def, unlockedAt: found?.unlockedAt };
+    const at = found?.unlockedAt;
+    return { ...def, unlockedAt: at == null ? undefined : at };
   });
   const orderMap = new Map(ACHIEVEMENT_DISPLAY_ORDER.map((id, i) => [id, i]));
   return [...merged].sort((a, b) => {

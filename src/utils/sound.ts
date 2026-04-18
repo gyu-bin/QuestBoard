@@ -34,7 +34,7 @@ async function playLocal() {
       } catch {}
     }, PLAY_DURATION_MS);
     sound.setOnPlaybackStatusUpdate((s) => {
-      if (s.isLoaded && s.didJustFinishAndNotReset) {
+      if (s.isLoaded && s.didJustFinish) {
         clearTimeout(timer);
         sound.unloadAsync();
       }
